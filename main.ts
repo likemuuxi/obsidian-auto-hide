@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon, TFile, WorkspaceLeaf } from 'obsidian';
 
 interface AutoHideSettings {
 	expandSidebar_onClickRibbon: boolean;
@@ -6,6 +6,8 @@ interface AutoHideSettings {
 	lockSidebar: boolean;
 	leftPinActive: boolean;
 	rightPinActive: boolean;
+	homepagePath: string;
+	collapseSidebar_onClickDataType: boolean;
 }
 
 const DEFAULT_SETTINGS: AutoHideSettings = {
@@ -13,8 +15,13 @@ const DEFAULT_SETTINGS: AutoHideSettings = {
 	expandSidebar_onClickNoteTitle: false,
 	lockSidebar: false,
 	leftPinActive: false,
-	rightPinActive: false
+	rightPinActive: false,
+	homepagePath: "",
+	collapseSidebar_onClickDataType: true,
 }
+
+// 在文件顶部或类外部定义这个常量
+const COLLAPSIBLE_DATA_TYPES = ["surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"];
 
 export default class AutoHidePlugin extends Plugin {
 	settings: AutoHideSettings;
@@ -23,15 +30,16 @@ export default class AutoHidePlugin extends Plugin {
 	rootSplitEl: HTMLElement;
 	leftRibbonEl: HTMLElement;
 	rightRibbonEl: HTMLElement;
+	workspaceContainerEl: HTMLElement;
 
 	async onload() {
 		await this.loadSettings();
 
 		this.addSettingTab(new AutoHideSettingTab(this.app, this));
 
-		addIcon("oah-pin", `<g transform="matrix(.87777 .88112 -.87777 .88112 43.03 -31.116)" style="fill:none"><g transform="translate(3.0597 -.53266)" stroke="currentColor" stroke-linejoin="round" stroke-width="3" style="fill:none"><path d="m27.884 53.709c-2.1049-8.9245 4.547-11.436 9.5283-14.888l1.5881-23.821c-7.9403-1.4888-7.9403-2.3554-7.9403-8.9328h31.761c0 6.5774 0 7.444-7.9403 8.9328l1.5881 23.821c4.9814 3.4517 11.633 5.9636 9.5283 14.888l-19.057 1.4e-5z" style="fill:none"/><path d="m43.764 53.709v33.349l3.1761 7.9403 3.1761-7.9403v-33.349" style="fill:none"/></g></g>`);
-		addIcon("oah-filled-pin", `<g transform="matrix(.87777 .88112 -.87777 .88112 43.03 -31.116)"><g transform="translate(3.0597 -.53266)" stroke="currentColor" fill="currentColor" stroke-linejoin="round" stroke-width="3"><path d="m27.884 53.709c-2.1049-8.9245 4.547-11.436 9.5283-14.888l1.5881-23.821c-7.9403-1.4888-7.9403-2.3554-7.9403-8.9328h31.761c0 6.5774 0 7.444-7.9403 8.9328l1.5881 23.821c4.9814 3.4517 11.633 5.9636 9.5283 14.888l-19.057 1.4e-5z"/><path d="m43.764 53.709v33.349l3.1761 7.9403 3.1761-7.9403v-33.349"/></g></g>`);
-
+		addIcon("oah-pin", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`);
+		addIcon("oah-pin-off", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin-off"><line x1="2" y1="2" x2="22" y2="22"/><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14"/><path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89"/></svg>`);
+		
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
 			this.registerEvents();
@@ -41,13 +49,24 @@ export default class AutoHidePlugin extends Plugin {
 		this.app.workspace.on("layout-change", () => {
 			this.init();
 			this.togglePins();
-			if (this.settings.leftPinActive) {
-				this.leftSplit.expand();
-			}
-			if (this.settings.rightPinActive) {
-				this.rightSplit.expand();
-			}
+			this.addHomeIcon();
+			// if (this.settings.leftPinActive) {
+			// 	this.leftSplit.expand();
+			// }
+			// if (this.settings.rightPinActive) {
+			// 	this.rightSplit.expand();
+			// }
 		});
+
+		this.registerEvent(
+			this.app.workspace.on('active-leaf-change', (leaf) => {
+				if (leaf) {
+					setTimeout(() => {
+						this.handleLeafChange(leaf);
+					}, 0);
+				}
+			})
+		);
 	}
 
 	onunload() {
@@ -65,75 +84,244 @@ export default class AutoHidePlugin extends Plugin {
 	init() {
 		this.leftSplit = this.app.workspace.leftSplit;
 		this.rightSplit = this.app.workspace.rightSplit;
+		this.workspaceContainerEl = (this.app.workspace as any).containerEl;
 		this.rootSplitEl = (this.app.workspace.rootSplit as any).containerEl;
 		this.leftRibbonEl = (this.app.workspace.leftRibbon as any).containerEl;
 		this.rightRibbonEl = (this.app.workspace.rightRibbon as any).containerEl;
 	}
 
 	registerEvents() {
-		// Use workspace.containerEl instead of rootSplitEl to avoid removing EventListener when switching workspace
-		this.registerDomEvent(this.app.workspace.containerEl, 'click', (evt: any) => {
-			// focus to rootSplitEl
-			if (!this.rootSplitEl.contains(evt.target)) {
+		this.registerDomEvent(this.app.workspace.containerEl, "focus", (evt) => {
+			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-title")) {
+				this.removeHomeIcon();
 				return;
 			}
-			// prevents unexpected behavior when clicking on the expand button
-			if(evt.target.closest(".workspace-tab-header-container") !== null) {
+		}, { capture: true });
+		this.registerDomEvent(this.app.workspace.containerEl, "blur", (evt) => {
+			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-title")) {
+				setTimeout(() => {
+					this.addHomeIcon();
+				}, 200);
 				return;
 			}
-			// prevents unexpected behavior when clicking on the tag
-			if (evt.target.classList.contains("cm-hashtag") || evt.target.classList.contains("tag")) {
+		}, { capture: true });
+		this.registerDomEvent(this.app.workspace.containerEl, "auxclick", (evt) => { // 右键在文件管理器中显示
+			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				const dataPath = (evt.target as HTMLElement).dataset.path;
+				const fileExplorer = (this.app as any).internalPlugins.getPluginById("file-explorer");
+				if (fileExplorer && fileExplorer.enabled) {
+					const file = this.app.vault.getAbstractFileByPath(dataPath as string);
+					if (file) fileExplorer.instance.revealInFolder(file);
+				}
+			}
+		}, { capture: true });
+		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => { // 阻止 folder note 弹出文件管理器
+			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb") && (evt.target as HTMLElement).classList.contains("has-folder-note")) {
+				evt.stopPropagation();
+				evt.preventDefault();
+				const dataPath = (evt.target as HTMLElement).dataset.path;
+				const fileExtensions = [".md", ".canvas"];
+				let file: TFile | null = null, targetLeaf;
+				if (dataPath) {
+					for (const ext of fileExtensions) {
+						const newPath = `${dataPath}/${dataPath.split("/").pop()}${ext}`;
+						const abstractFile = this.app.vault.getAbstractFileByPath(newPath);
+						if (abstractFile instanceof TFile) {
+							file = abstractFile;
+							const leaves = this.app.workspace.getLeavesOfType(ext === ".md" ? "markdown" : "canvas");
+							targetLeaf = leaves.find((leaf) => (leaf.view as any).file && (leaf.view as any).file.path === abstractFile.path);
+							if (targetLeaf || file) break;
+						}
+					}
+				}
+				if (file && !evt.ctrlKey) {
+					if (targetLeaf) {
+						this.app.workspace.setActiveLeaf(targetLeaf);
+					} else {
+						this.app.workspace.getLeaf(false).openFile(file);
+					}
+				} else if (file && evt.ctrlKey) {
+					if (targetLeaf) {
+						this.app.workspace.setActiveLeaf(targetLeaf);
+					} else {
+						this.app.workspace.getLeaf(true).openFile(file);
+					}
+				}
+				if (!this.settings.leftPinActive) {
+					this.leftSplit.collapse();
+				}
+			}
+			if (((evt.target as HTMLElement).closest(".contribution-widget, .mm-mindmap-container") !== null) && this.settings.collapseSidebar_onClickDataType) {
+				if (!this.settings.leftPinActive) {
+					this.leftSplit.collapse();
+				}
 				return;
 			}
-			// prevents unexpected behavior when clicking on the tag in the yaml front matter
-			if (evt.target.closest(".multi-select-pill-content") !== null) {
-				return;
-			}
-			// prevents unexpected behavior with other plugins
-			const preventsClassList: string[] = ["snw-reference"];
-			if (preventsClassList.some(e=>evt.target.classList.contains(e))) {
-				return;
-			}
-			// prevents collapsing when clicking on the breadcrumb
-			if (evt.target.classList.contains("view-header-breadcrumb")) {
-				return;
-			}
+		}, { capture: true });
 
-			// Click on the note title to expand the left sidebar (Optional).
-			if (evt.target.classList.contains("view-header-title") && this.settings.expandSidebar_onClickNoteTitle) {
-				if (this.leftSplit.collapsed == true) this.leftSplit.expand();
+
+		// const isTabStacked = (element: HTMLElement) => {
+		// 	const innerContainer = element.closest('.workspace-tab-header-container-inner');
+		// 	const outerContainer = element.closest('.workspace-tab-container');
+
+		// 	if (innerContainer) {
+		// 		return false;
+		// 	} else if (outerContainer) {
+		// 		return true;
+		// 	}
+		// 	return false;
+		// };
+		// const isSplitScreen = (element: HTMLElement) => {
+		// 	const rootSplit = element.closest('.workspace-split.mod-vertical.mod-root');
+		// 	if (!rootSplit) {
+		// 		return false;
+		// 	}
+		// 	const newTabButtons = rootSplit.querySelectorAll('.workspace-tab-header-new-tab');
+		// 	return newTabButtons.length > 1;
+		// };
+		// const isModalOpen = (element: HTMLElement) => {
+		// 	const root = element.closest('body') || document.documentElement;
+		// 	const modal = root.querySelector('.modal');
+		// 	return !!modal;
+		// };
+
+
+		const handleDataType = (dataType: string) => {
+			if (COLLAPSIBLE_DATA_TYPES.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
+				if (!this.settings.leftPinActive) {
+					this.leftSplit.collapse();
+				}
+				this.rightSplit.collapse();
+			}
+		};
+		const isTabStacked = (element: HTMLElement) => {
+			const innerContainer = element.closest('.workspace-tab-header-container-inner');
+			const outerContainer = element.closest('.workspace-tab-container');
+
+			if (innerContainer) {
+				return false;
+			} else if (outerContainer) {
+				return true;
+			}
+			return false;
+		};
+		const isSplitScreen = (element: HTMLElement) => {
+			const rootSplit = element.closest('.workspace-split.mod-vertical.mod-root');
+			if (!rootSplit) {
+				return false;
+			}
+			const newTabButtons = rootSplit.querySelectorAll('.workspace-tab-header-new-tab');
+			return newTabButtons.length > 1;
+		};
+		const isModalOpen = (element: HTMLElement) => {
+			const root = element.closest('body') || document.documentElement;
+			const modal = root.querySelector('.modal');
+			return !!modal;
+		};
+		const startObserver = () => {
+			observer.observe(this.workspaceContainerEl, config);
+		};
+		const observerCallback = (mutationsList: MutationRecord[], observer: MutationObserver) => {
+			for (const mutation of mutationsList) {
+				if (mutation.type === "attributes" && mutation.attributeName === "class") {
+					const target = mutation.target;
+					if (
+						(target as HTMLElement).matches &&
+						(target as HTMLElement).matches(".workspace-tab-header.is-active.mod-active") &&
+						(target as HTMLElement).getAttribute
+					) {
+						// 检查面板是否处于分屏状态或堆叠状态
+						if (isSplitScreen(target as HTMLElement) || isTabStacked(target as HTMLElement) || isModalOpen(target as HTMLElement)) {
+							//this.rightSplit.collapse();
+							return;
+						}
+						const dataType = (target as HTMLElement).getAttribute("data-type");
+						if (dataType && COLLAPSIBLE_DATA_TYPES.includes(dataType)) {
+							handleDataType(dataType);
+						} else {
+							this.rightSplit.expand();
+						}
+					}
+				}
+			}
+		};
+		const observer = new MutationObserver(observerCallback);
+		const config = {
+			attributes: true,
+			attributeFilter: ["class"],
+			subtree: true,
+		};
+		startObserver();
+
+		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => {
+			if (!this.rootSplitEl.contains(evt.target as HTMLElement)) {
 				return;
 			}
-
-			// // Click on the rootSplit() to collapse both sidebars.
+			if ((evt.target as HTMLElement).closest(".workspace-tab-header-container") !== null) {
+				return;
+			}
+			if ((evt.target as HTMLElement).classList.contains("cm-hashtag") || (evt.target as HTMLElement).classList.contains("tag")) {
+				return;
+			}
+			if ((evt.target as HTMLElement).closest(".multi-select-pill-content") !== null) {
+				return;
+			}
+			const preventsClassList = ["snw-reference"];
+			if (preventsClassList.some((e) => (evt.target as HTMLElement).classList.contains(e))) {
+				return;
+			}
+			if ((evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
+				return;
+			}
+			if ((evt.target as HTMLElement).classList.contains("homepage-button")) {
+				const homepagePath = this.settings.homepagePath;
+				const file = this.app.vault.getAbstractFileByPath(homepagePath);
+				if (file instanceof TFile) {
+					const leaves = this.app.workspace.getLeavesOfType("markdown");
+					const existingLeaf = leaves.find(leaf => (leaf.view as any).file?.path === file.path);
+					if (existingLeaf) {
+						this.app.workspace.setActiveLeaf(existingLeaf);
+					} else {
+						this.app.workspace.openLinkText(file.path, "", true, { active: true });
+					}
+				}
+				if (!this.settings.leftPinActive) {
+					this.leftSplit.collapse();
+				}
+				return;
+			}
+			if ((evt.target as HTMLElement).classList.contains("view-header-title") && this.settings.expandSidebar_onClickNoteTitle) {
+				if (this.leftSplit.collapsed == true)
+					this.leftSplit.expand();
+				return;
+			}
 			if (!this.settings.leftPinActive) {
 				this.leftSplit.collapse();
 			}
-			if (!this.settings.rightPinActive) {
-				this.rightSplit.collapse();
-			}
+			// if (!this.settings.rightPinActive) {
+			//   this.rightSplit.collapse();
+			// }
 		});
 
-		// Click on the blank area of leftRibbonEl to expand the left sidebar (Optional).
-		this.registerDomEvent(this.leftRibbonEl, 'click', (evt: MouseEvent) => {
+		this.registerDomEvent(this.leftRibbonEl, "click", (evt) => {
 			if (this.settings.expandSidebar_onClickRibbon) {
 				if (evt.target == this.leftRibbonEl) {
-					if (this.leftSplit.collapsed == true) this.leftSplit.expand();
+					if (this.leftSplit.collapsed == true)
+						this.leftSplit.expand();
 				}
 			}
 		});
-
-		// Click on the blank area of rightRibbonEl to expand the right sidebar (Optional).
-		this.registerDomEvent(this.rightRibbonEl, 'click', (evt: MouseEvent) => {
+		this.registerDomEvent(this.rightRibbonEl, "click", (evt) => {
 			if (this.settings.expandSidebar_onClickRibbon) {
 				if (evt.target == this.rightRibbonEl) {
-					if (this.rightSplit.collapsed == true) this.rightSplit.expand();
+					if (this.rightSplit.collapsed == true)
+						this.rightSplit.expand();
 				}
 			}
 		});
 	}
-
-	// Feature: pane locking
 
 	togglePins() {
 		if (!this.settings.lockSidebar) {
@@ -144,40 +332,51 @@ export default class AutoHidePlugin extends Plugin {
 			this.addPins();
 		}
 	}
-
+	addHomeIcon() {
+		const viewHeaderTitleParents = document.querySelectorAll('.view-header-title-parent');
+		const homeButton = document.createElement('div');
+		homeButton.textContent = 'HomePage';
+		homeButton.classList.add('homepage-button');
+		viewHeaderTitleParents.forEach((viewHeaderTitleParent) => {
+			const parentElement = viewHeaderTitleParent.parentElement;
+			if (parentElement && !parentElement.querySelector('.homepage-button')) {
+				parentElement.insertBefore(homeButton.cloneNode(true), viewHeaderTitleParent);
+			}
+		});
+	}
+	removeHomeIcon() {
+		const buttons = document.querySelectorAll('.homepage-button');
+		buttons.forEach(button => {
+			button.remove();
+		});
+	}
 	addPins() {
-		// tabHeaderContainers[0]=left, [2]=right. need more robust way to get these
 		const tabHeaderContainers = document.getElementsByClassName("workspace-tab-header-container");
-
 		const lb = new ButtonComponent(tabHeaderContainers[0] as HTMLElement)
-			.setIcon(this.settings.leftPinActive ? "oah-filled-pin" : "oah-pin")
+			.setIcon(this.settings.leftPinActive ? "oah-pin-off" : "oah-pin")
 			.setClass("auto-hide-button")
 			.onClick(async () => {
 				this.settings.leftPinActive = !this.settings.leftPinActive;
 				await this.saveSettings();
-
 				if (this.settings.leftPinActive) {
-					lb.setIcon("oah-filled-pin");
+					lb.setIcon("oah-pin-off");
 				} else {
 					lb.setIcon("oah-pin");
 				}
 			});
-
-		const rb = new ButtonComponent(tabHeaderContainers[2] as HTMLElement)
-			.setIcon(this.settings.rightPinActive ? "oah-filled-pin" : "oah-pin")
-			.setClass("auto-hide-button")
-			.onClick(async () => {
-				this.settings.rightPinActive = !this.settings.rightPinActive;
-				await this.saveSettings();
-
-				if (this.settings.rightPinActive) {
-					rb.setIcon("oah-filled-pin");
-				} else {
-					rb.setIcon("oah-pin");
-				}
-			});
+		// const rb = new ButtonComponent(tabHeaderContainers[2] as HTMLElement)
+		// .setIcon(this.settings.rightPinActive ? "oah-pin-off" : "oah-pin")
+		// .setClass("auto-hide-button")
+		// .onClick(async () => {
+		// 	this.settings.rightPinActive = !this.settings.rightPinActive;
+		// 	await this.saveSettings();
+		// 	if (this.settings.rightPinActive) {
+		// 		rb.setIcon("oah-pin-off");
+		// 	} else {
+		// 		rb.setIcon("oah-pin");
+		// 	}
+		// });
 	}
-
 	removePins() {
 		const pins = document.getElementsByClassName("auto-hide-button");
 		while (pins.length) {
@@ -187,6 +386,7 @@ export default class AutoHidePlugin extends Plugin {
 		}
 	}
 }
+
 
 class AutoHideSettingTab extends PluginSettingTab {
 	plugin: AutoHidePlugin;
@@ -212,6 +412,7 @@ class AutoHideSettingTab extends PluginSettingTab {
 					this.plugin.settings.expandSidebar_onClickRibbon = value;
 					await this.plugin.saveSettings();
 				}));
+
 		new Setting(containerEl)
 			.setName('Expand the sidebar with a note title')
 			.setDesc('Click on the note title to expand the left sidebar.')
@@ -221,7 +422,19 @@ class AutoHideSettingTab extends PluginSettingTab {
 					this.plugin.settings.expandSidebar_onClickNoteTitle = value;
 					await this.plugin.saveSettings();
 				}));
+
+		new Setting(containerEl)
+			.setName('Collapse sidebar on data type click')
+			.setDesc('Fold the sidebar when clicking on External links, MarkMind, Components, etc.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.collapseSidebar_onClickDataType)
+				.onChange(async (value) => {
+					this.plugin.settings.collapseSidebar_onClickDataType = value;
+					await this.plugin.saveSettings();
+				}));
+
 		containerEl.createEl('h4', { text: 'EXPERIMENTAL!' });
+
 		new Setting(containerEl)
 			.setName('Lock sidebar collapse')
 			.setDesc('Add a pin that can temporarily lock the sidebar collapse.')
@@ -232,5 +445,16 @@ class AutoHideSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 					this.plugin.togglePins();
 				}));
+
+		new Setting(containerEl)
+		.setName('HomePage Path')
+		.setDesc('Set the path of the HomePage file.')
+		.addText(text => text
+			.setPlaceholder('Enter the path of the homepage file')
+			.setValue(this.plugin.settings.homepagePath)
+			.onChange(async (value) => {
+				this.plugin.settings.homepagePath = value;
+				await this.plugin.saveSettings();
+			}));
 	}
 }
