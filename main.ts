@@ -11,7 +11,7 @@ interface AutoHideSettings {
 }
 
 const DEFAULT_SETTINGS: AutoHideSettings = {
-	expandSidebar_onClickRibbon: false,
+	expandSidebar_onClickRibbon: true,
 	expandSidebar_onClickNoteTitle: false,
 	lockSidebar: false,
 	leftPinActive: false,
@@ -57,16 +57,6 @@ export default class AutoHidePlugin extends Plugin {
 			// 	this.rightSplit.expand();
 			// }
 		});
-
-		this.registerEvent(
-			this.app.workspace.on('active-leaf-change', (leaf) => {
-				if (leaf) {
-					setTimeout(() => {
-						this.handleLeafChange(leaf);
-					}, 0);
-				}
-			})
-		);
 	}
 
 	onunload() {
