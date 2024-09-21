@@ -8,6 +8,7 @@ interface AutoHideSettings {
 	rightPinActive: boolean;
 	homepagePath: string;
 	collapseSidebar_onClickDataType: boolean;
+	customDataTypes: string[];
 }
 
 const DEFAULT_SETTINGS: AutoHideSettings = {
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS: AutoHideSettings = {
 	rightPinActive: false,
 	homepagePath: "",
 	collapseSidebar_onClickDataType: true,
+	customDataTypes: ["surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"]
 }
 
 // 在文件顶部或类外部定义这个常量
@@ -31,6 +33,7 @@ export default class AutoHidePlugin extends Plugin {
 	leftRibbonEl: HTMLElement;
 	rightRibbonEl: HTMLElement;
 	workspaceContainerEl: HTMLElement;
+	private observer: MutationObserver;
 
 	async onload() {
 		await this.loadSettings();
@@ -39,7 +42,7 @@ export default class AutoHidePlugin extends Plugin {
 
 		addIcon("oah-pin", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`);
 		addIcon("oah-pin-off", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin-off"><line x1="2" y1="2" x2="22" y2="22"/><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14"/><path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89"/></svg>`);
-		
+
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
 			this.registerEvents();
@@ -50,6 +53,7 @@ export default class AutoHidePlugin extends Plugin {
 			this.init();
 			this.togglePins();
 			this.addHomeIcon();
+			this.handleLayoutChange();
 			// if (this.settings.leftPinActive) {
 			// 	this.leftSplit.expand();
 			// }
@@ -57,10 +61,14 @@ export default class AutoHidePlugin extends Plugin {
 			// 	this.rightSplit.expand();
 			// }
 		});
+		this.observer = new MutationObserver(this.observerCallback.bind(this));
+		this.startObserver();
 	}
 
 	onunload() {
 		this.removePins();
+		this.observer.disconnect();
+		this.app.workspace.off("layout-change", this.handleLayoutChange);
 	}
 
 	async loadSettings() {
@@ -79,6 +87,93 @@ export default class AutoHidePlugin extends Plugin {
 		this.leftRibbonEl = (this.app.workspace.leftRibbon as any).containerEl;
 		this.rightRibbonEl = (this.app.workspace.rightRibbon as any).containerEl;
 	}
+
+	private handleLayoutChange = () => {
+		// 获取当前活动的标签页
+		const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
+
+		if (activeTab) {
+			// 检查面板是否处于分屏状态或堆叠状态
+			if (this.isSplitScreen(activeTab) || this.isTabStacked(activeTab) || this.isModalOpen(activeTab)) {
+				return;
+			}
+
+			const dataType = activeTab.getAttribute("data-type");
+			if (dataType && COLLAPSIBLE_DATA_TYPES.includes(dataType)) {
+				this.handleDataType(dataType);
+			} else {
+				this.rightSplit.expand();
+			}
+		}
+	};
+
+	private isTabStacked = (element: HTMLElement) => {
+		const innerContainer = element.closest('.workspace-tab-header-container-inner');
+		const outerContainer = element.closest('.workspace-tab-container');
+
+		if (innerContainer) {
+			return false;
+		} else if (outerContainer) {
+			return true;
+		}
+		return false;
+	};
+	private isSplitScreen = (element: HTMLElement) => {
+		const rootSplit = element.closest('.workspace-split.mod-vertical.mod-root');
+		if (!rootSplit) {
+			return false;
+		}
+		const newTabButtons = rootSplit.querySelectorAll('.workspace-tab-header-new-tab');
+		return newTabButtons.length > 1;
+	};
+	private isModalOpen = (element: HTMLElement) => {
+		const root = element.closest('body') || document.documentElement;
+		const modal = root.querySelector('.modal');
+		return !!modal;
+	};
+
+	private handleDataType = (dataType: string) => {
+		if (COLLAPSIBLE_DATA_TYPES.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
+			if (!this.settings.leftPinActive) {
+				this.leftSplit.collapse();
+			}
+			this.rightSplit.collapse();
+		}
+	};
+
+	private startObserver() {
+		const config = {
+			attributes: true,
+			attributeFilter: ["class"],
+			subtree: true,
+		};
+		this.observer.observe(this.workspaceContainerEl, config);
+	}
+
+	private observerCallback = (mutationsList: MutationRecord[], observer: MutationObserver) => {
+		for (const mutation of mutationsList) {
+			if (mutation.type === "attributes" && mutation.attributeName === "class") {
+				const target = mutation.target;
+				if (
+					(target as HTMLElement).matches &&
+					(target as HTMLElement).matches(".workspace-tab-header.is-active.mod-active") &&
+					(target as HTMLElement).getAttribute
+				) {
+					// 检查面板是否处于分屏状态或堆叠状态
+					if (this.isSplitScreen(target as HTMLElement) || this.isTabStacked(target as HTMLElement) || this.isModalOpen(target as HTMLElement)) {
+						//this.rightSplit.collapse();
+						return;
+					}
+					const dataType = (target as HTMLElement).getAttribute("data-type");
+					if (dataType && COLLAPSIBLE_DATA_TYPES.includes(dataType)) {
+						this.handleDataType(dataType);
+					} else {
+						this.rightSplit.expand();
+					}
+				}
+			}
+		}
+	};
 
 	registerEvents() {
 		this.registerDomEvent(this.app.workspace.containerEl, "focus", (evt) => {
@@ -150,100 +245,6 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 		}, { capture: true });
-
-
-		// const isTabStacked = (element: HTMLElement) => {
-		// 	const innerContainer = element.closest('.workspace-tab-header-container-inner');
-		// 	const outerContainer = element.closest('.workspace-tab-container');
-
-		// 	if (innerContainer) {
-		// 		return false;
-		// 	} else if (outerContainer) {
-		// 		return true;
-		// 	}
-		// 	return false;
-		// };
-		// const isSplitScreen = (element: HTMLElement) => {
-		// 	const rootSplit = element.closest('.workspace-split.mod-vertical.mod-root');
-		// 	if (!rootSplit) {
-		// 		return false;
-		// 	}
-		// 	const newTabButtons = rootSplit.querySelectorAll('.workspace-tab-header-new-tab');
-		// 	return newTabButtons.length > 1;
-		// };
-		// const isModalOpen = (element: HTMLElement) => {
-		// 	const root = element.closest('body') || document.documentElement;
-		// 	const modal = root.querySelector('.modal');
-		// 	return !!modal;
-		// };
-
-
-		const handleDataType = (dataType: string) => {
-			if (COLLAPSIBLE_DATA_TYPES.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
-				if (!this.settings.leftPinActive) {
-					this.leftSplit.collapse();
-				}
-				this.rightSplit.collapse();
-			}
-		};
-		const isTabStacked = (element: HTMLElement) => {
-			const innerContainer = element.closest('.workspace-tab-header-container-inner');
-			const outerContainer = element.closest('.workspace-tab-container');
-
-			if (innerContainer) {
-				return false;
-			} else if (outerContainer) {
-				return true;
-			}
-			return false;
-		};
-		const isSplitScreen = (element: HTMLElement) => {
-			const rootSplit = element.closest('.workspace-split.mod-vertical.mod-root');
-			if (!rootSplit) {
-				return false;
-			}
-			const newTabButtons = rootSplit.querySelectorAll('.workspace-tab-header-new-tab');
-			return newTabButtons.length > 1;
-		};
-		const isModalOpen = (element: HTMLElement) => {
-			const root = element.closest('body') || document.documentElement;
-			const modal = root.querySelector('.modal');
-			return !!modal;
-		};
-		const startObserver = () => {
-			observer.observe(this.workspaceContainerEl, config);
-		};
-		const observerCallback = (mutationsList: MutationRecord[], observer: MutationObserver) => {
-			for (const mutation of mutationsList) {
-				if (mutation.type === "attributes" && mutation.attributeName === "class") {
-					const target = mutation.target;
-					if (
-						(target as HTMLElement).matches &&
-						(target as HTMLElement).matches(".workspace-tab-header.is-active.mod-active") &&
-						(target as HTMLElement).getAttribute
-					) {
-						// 检查面板是否处于分屏状态或堆叠状态
-						if (isSplitScreen(target as HTMLElement) || isTabStacked(target as HTMLElement) || isModalOpen(target as HTMLElement)) {
-							//this.rightSplit.collapse();
-							return;
-						}
-						const dataType = (target as HTMLElement).getAttribute("data-type");
-						if (dataType && COLLAPSIBLE_DATA_TYPES.includes(dataType)) {
-							handleDataType(dataType);
-						} else {
-							this.rightSplit.expand();
-						}
-					}
-				}
-			}
-		};
-		const observer = new MutationObserver(observerCallback);
-		const config = {
-			attributes: true,
-			attributeFilter: ["class"],
-			subtree: true,
-		};
-		startObserver();
 
 		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => {
 			if (!this.rootSplitEl.contains(evt.target as HTMLElement)) {
@@ -388,10 +389,8 @@ class AutoHideSettingTab extends PluginSettingTab {
 
 	display(): void {
 		const { containerEl } = this;
-
 		containerEl.empty();
-
-		containerEl.createEl('h2', { text: 'Settings for Auto Hide plugin.' });
+		containerEl.classList.add('auto-hide-plugin-settings');
 
 		new Setting(containerEl)
 			.setName('Expand the sidebar with a ribbon')
@@ -423,7 +422,7 @@ class AutoHideSettingTab extends PluginSettingTab {
 					await this.plugin.saveSettings();
 				}));
 
-		containerEl.createEl('h4', { text: 'EXPERIMENTAL!' });
+
 
 		new Setting(containerEl)
 			.setName('Lock sidebar collapse')
@@ -436,15 +435,28 @@ class AutoHideSettingTab extends PluginSettingTab {
 					this.plugin.togglePins();
 				}));
 
+		new Setting(containerEl).setName('Advanced').setHeading();
+
 		new Setting(containerEl)
-		.setName('HomePage Path')
-		.setDesc('Set the path of the HomePage file.')
-		.addText(text => text
-			.setPlaceholder('Enter the path of the homepage file')
-			.setValue(this.plugin.settings.homepagePath)
-			.onChange(async (value) => {
-				this.plugin.settings.homepagePath = value;
-				await this.plugin.saveSettings();
-			}));
+			.setName('HomePage Path')
+			.setDesc('Set the path of the HomePage file.')
+			.addText(text => text
+				.setPlaceholder('Enter the path of the homepage file')
+				.setValue(this.plugin.settings.homepagePath)
+				.onChange(async (value) => {
+					this.plugin.settings.homepagePath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+            .setName('Custom data types')
+            .setDesc('Add custom foldable view types, one per line. When monitoring, hide all sidebars.')
+            .addTextArea(text => text
+                .setPlaceholder('Enter custom type')
+                .setValue(this.plugin.settings.customDataTypes.join('\n'))
+                .onChange(async (value) => {
+                    this.plugin.settings.customDataTypes = value.split('\n').filter(t => t.trim() !== '');
+                    await this.plugin.saveSettings();
+                }));
 	}
 }

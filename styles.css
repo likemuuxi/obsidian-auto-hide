@@ -8,12 +8,12 @@
 	box-shadow: none !important;
 	background-color: inherit !important;
 	color: var(--icon-color) !important;
-    /* opacity: 0; */
+    opacity: 0;
 }
 
 .auto-hide-button:hover {
 	background-color: var(--background-modifier-hover) !important;
-    /* opacity: 1; */
+    opacity: 1;
 }
 
 .homepage-button {
@@ -33,13 +33,8 @@
     background-color: var(--background-modifier-hover) !important;
 }
 
-/* .custom-context-menu {
-    position: absolute;
-    z-index: 1000;
-    border-radius: 4px;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.auto-hide-plugin-settings .setting-item-control textarea {
+    width: 100%;
+    min-height: 100px;
+    resize: vertical;
 }
-
-.menu-item:hover {
-    background-color: var(--background-modifier-hover) !important;
-} */
