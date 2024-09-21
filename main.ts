@@ -45,8 +45,11 @@ export default class AutoHidePlugin extends Plugin {
 
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
-			this.registerEvents();
 			this.togglePins();
+			
+			this.registerEvents();
+			this.observer = new MutationObserver(this.observerCallback.bind(this));
+			this.startObserver();
 		});
 		// Reassigned when workspace is switched
 		this.app.workspace.on("layout-change", () => {
@@ -61,8 +64,6 @@ export default class AutoHidePlugin extends Plugin {
 			// 	this.rightSplit.expand();
 			// }
 		});
-		this.observer = new MutationObserver(this.observerCallback.bind(this));
-		this.startObserver();
 	}
 
 	onunload() {
@@ -107,6 +108,15 @@ export default class AutoHidePlugin extends Plugin {
 		}
 	};
 
+	private handleDataType = (dataType: string) => {
+		if (COLLAPSIBLE_DATA_TYPES.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
+			if (!this.settings.leftPinActive) {
+				this.leftSplit.collapse();
+			}
+			this.rightSplit.collapse();
+		}
+	};
+
 	private isTabStacked = (element: HTMLElement) => {
 		const innerContainer = element.closest('.workspace-tab-header-container-inner');
 		const outerContainer = element.closest('.workspace-tab-container');
@@ -132,14 +142,6 @@ export default class AutoHidePlugin extends Plugin {
 		return !!modal;
 	};
 
-	private handleDataType = (dataType: string) => {
-		if (COLLAPSIBLE_DATA_TYPES.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
-			if (!this.settings.leftPinActive) {
-				this.leftSplit.collapse();
-			}
-			this.rightSplit.collapse();
-		}
-	};
 
 	private startObserver() {
 		const config = {
@@ -413,18 +415,6 @@ class AutoHideSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-			.setName('Collapse sidebar on data type click')
-			.setDesc('Fold the sidebar when clicking on External links, MarkMind, Components, etc.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.collapseSidebar_onClickDataType)
-				.onChange(async (value) => {
-					this.plugin.settings.collapseSidebar_onClickDataType = value;
-					await this.plugin.saveSettings();
-				}));
-
-
-
-		new Setting(containerEl)
 			.setName('Lock sidebar collapse')
 			.setDesc('Add a pin that can temporarily lock the sidebar collapse.')
 			.addToggle(toggle => toggle
@@ -449,14 +439,27 @@ class AutoHideSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-            .setName('Custom data types')
-            .setDesc('Add custom foldable view types, one per line. When monitoring, hide all sidebars.')
-            .addTextArea(text => text
-                .setPlaceholder('Enter custom type')
-                .setValue(this.plugin.settings.customDataTypes.join('\n'))
-                .onChange(async (value) => {
-                    this.plugin.settings.customDataTypes = value.split('\n').filter(t => t.trim() !== '');
-                    await this.plugin.saveSettings();
-                }));
+		.setName('Collapse sidebar on data type click')
+		.setDesc('Fold the sidebar when clicking on External links, MarkMind, Components, etc.')
+		.addToggle(toggle => toggle
+			.setValue(this.plugin.settings.collapseSidebar_onClickDataType)
+			.onChange(async (value) => {
+				this.plugin.settings.collapseSidebar_onClickDataType = value;
+				await this.plugin.saveSettings();
+				this.display(); // 重新渲染设置页面
+			}));
+	
+		if (this.plugin.settings.collapseSidebar_onClickDataType) {
+			new Setting(containerEl)
+				.setName('Custom data types')
+				.setDesc('Add custom foldable view types, one per line. When monitoring, hide all sidebars.')
+				.addTextArea(text => text
+					.setPlaceholder('Enter custom type')
+					.setValue(this.plugin.settings.customDataTypes.join('\n'))
+					.onChange(async (value) => {
+						this.plugin.settings.customDataTypes = value.split('\n').filter(t => t.trim() !== '');
+						await this.plugin.saveSettings();
+					}));
+		}
 	}
 }
