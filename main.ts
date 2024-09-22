@@ -22,9 +22,6 @@ const DEFAULT_SETTINGS: AutoHideSettings = {
 	customDataTypes: ["surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"]
 }
 
-// 在文件顶部或类外部定义这个常量
-const COLLAPSIBLE_DATA_TYPES = ["surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"];
-
 export default class AutoHidePlugin extends Plugin {
 	settings: AutoHideSettings;
 	leftSplit: WorkspaceSidedock;
@@ -100,7 +97,7 @@ export default class AutoHidePlugin extends Plugin {
 			}
 
 			const dataType = activeTab.getAttribute("data-type");
-			if (dataType && COLLAPSIBLE_DATA_TYPES.includes(dataType)) {
+			if (dataType && this.settings.customDataTypes.includes(dataType)) {
 				this.handleDataType(dataType);
 			} else {
 				this.rightSplit.expand();
@@ -109,7 +106,7 @@ export default class AutoHidePlugin extends Plugin {
 	};
 
 	private handleDataType = (dataType: string) => {
-		if (COLLAPSIBLE_DATA_TYPES.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
+		if (this.settings.customDataTypes.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
 			if (!this.settings.leftPinActive) {
 				this.leftSplit.collapse();
 			}
@@ -167,7 +164,7 @@ export default class AutoHidePlugin extends Plugin {
 						return;
 					}
 					const dataType = (target as HTMLElement).getAttribute("data-type");
-					if (dataType && COLLAPSIBLE_DATA_TYPES.includes(dataType)) {
+					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
 					} else {
 						this.rightSplit.expand();
