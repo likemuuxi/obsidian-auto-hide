@@ -214,6 +214,7 @@ export default class AutoHidePlugin extends Plugin {
 				if (dataPath) {
 					for (const ext of fileExtensions) {
 						const newPath = `${dataPath}/${dataPath.split("/").pop()}${ext}`;
+						// const newPath = `${dataPath}${ext}`;
 						const abstractFile = this.app.vault.getAbstractFileByPath(newPath);
 						if (abstractFile instanceof TFile) {
 							file = abstractFile;
@@ -246,8 +247,16 @@ export default class AutoHidePlugin extends Plugin {
 				}
 				return;
 			}
+			if (((evt.target as HTMLElement).closest(".components--Component") !== null) && this.settings.collapseSidebar_onClickDataType) {
+				console.log("Matched .components--Component or child");
+				if (!this.settings.leftPinActive) {
+					this.leftSplit.collapse();
+					return;
+				}
+				return;
+			}
 		}, { capture: true });
-
+		
 		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => {
 			if (!this.rootSplitEl.contains(evt.target as HTMLElement)) {
 				return;
