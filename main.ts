@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon, TFile, WorkspaceLeaf } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon, TFile, Menu, TFolder } from 'obsidian';
 
 interface AutoHideSettings {
 	expandSidebar_onClickRibbon: boolean;
@@ -43,7 +43,7 @@ export default class AutoHidePlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
 			this.togglePins();
-			
+
 			this.registerEvents();
 			this.observer = new MutationObserver(this.observerCallback.bind(this));
 			this.startObserver();
@@ -166,8 +166,6 @@ export default class AutoHidePlugin extends Plugin {
 					const dataType = (target as HTMLElement).getAttribute("data-type");
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
-					} else {
-						this.rightSplit.expand();
 					}
 				}
 			}
@@ -253,7 +251,7 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 		}, { capture: true });
-		
+
 		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => {
 			if (!this.rootSplitEl.contains(evt.target as HTMLElement)) {
 				return;
@@ -283,7 +281,7 @@ export default class AutoHidePlugin extends Plugin {
 					if (existingLeaf) {
 						this.app.workspace.setActiveLeaf(existingLeaf);
 					} else {
-						this.app.workspace.openLinkText(file.path, "", true, { active: true });
+						this.app.workspace.openLinkText(file.path, "", false, { active: true });
 					}
 				}
 				if (!this.settings.leftPinActive) {
@@ -331,18 +329,112 @@ export default class AutoHidePlugin extends Plugin {
 			this.addPins();
 		}
 	}
+
 	addHomeIcon() {
 		const viewHeaderTitleParents = document.querySelectorAll('.view-header-title-parent');
-		const homeButton = document.createElement('div');
-		homeButton.textContent = 'HomePage';
-		homeButton.classList.add('homepage-button');
+	
 		viewHeaderTitleParents.forEach((viewHeaderTitleParent) => {
 			const parentElement = viewHeaderTitleParent.parentElement;
 			if (parentElement && !parentElement.querySelector('.homepage-button')) {
-				parentElement.insertBefore(homeButton.cloneNode(true), viewHeaderTitleParent);
+				const homeButton = document.createElement('div');
+				homeButton.textContent = 'HomePage';
+				homeButton.classList.add('homepage-button');
+	
+				// 为每个按钮单独添加右键事件监听器
+				const folderNote = (this as any).app.plugins.enabledPlugins.has("folder-notes");
+				if (folderNote) {
+					console.log("folderNote");
+					homeButton.addEventListener('contextmenu', (e) => {
+						e.preventDefault(); // 阻止默认右键菜单的弹出
+						this.showFolderMenu(homeButton, e.clientX, e.clientY);
+					});
+				}
+				parentElement.insertBefore(homeButton, viewHeaderTitleParent);
 			}
 		});
 	}
+	
+	private findFileInFolder(folder: string): { file: TFile | null, targetLeaf: any } {
+		const fileExtensions = [".md", ".canvas"];
+		let file: TFile | null = null, targetLeaf;
+		const folderNotePath = `${folder}/${folder}`;
+		for (const ext of fileExtensions) {
+			const newPath = `${folderNotePath}${ext}`;
+			const abstractFile = this.app.vault.getAbstractFileByPath(newPath);
+			if (abstractFile instanceof TFile) {
+				file = abstractFile;
+				const leaves = this.app.workspace.getLeavesOfType(ext === ".md" ? "markdown" : "canvas");
+				targetLeaf = leaves.find((leaf) => (leaf.view as any).file && (leaf.view as any).file.path === abstractFile.path);
+				if (targetLeaf || file) break;
+			}
+		}
+		return { file, targetLeaf };
+	}
+
+	private getRootFolders(): string[] {
+		const rootFolder = this.app.vault.getRoot();
+		return rootFolder.children
+			.filter(child => child instanceof TFolder)
+			.filter((folder: TFolder) => {
+				const fileExtensions = [".md", ".canvas"];
+				return fileExtensions.some(ext => {
+					const folderNotePath = `${folder.path}/${folder.name}${ext}`;
+					const file = this.app.vault.getAbstractFileByPath(folderNotePath);
+					return file !== null;
+				});
+			})
+			.map(folder => folder.name);
+	}
+
+	private currentMenu: Menu | null = null;
+
+	private showFolderMenu(button: HTMLElement, x: number, y: number) {
+		if (this.currentMenu) {
+			this.currentMenu.hide();
+		}
+	
+		const folders = this.getRootFolders();
+		const menu = new Menu();
+	
+		folders.forEach(folder => {
+			menu.addItem(item => {
+				item.setTitle(folder)
+					.onClick((e) => {
+						console.log("click");
+						const { file, targetLeaf } = this.findFileInFolder(folder);
+						if (file) {
+							if (e.ctrlKey) {
+								this.app.workspace.openLinkText(file.path, "", true, { active: true });
+							} else {
+								if (targetLeaf) {
+									this.app.workspace.setActiveLeaf(targetLeaf);
+								} else {
+									this.app.workspace.openLinkText(file.path, "", false, { active: true });
+								}
+							}
+						}
+					});
+			});
+		});
+	
+		// 计算菜单位置并显示
+		menu.showAtPosition({ x, y });
+	
+		// 保存当前菜单
+		this.currentMenu = menu;
+	
+		// 点击页面其他地方时隐藏菜单栏
+		document.addEventListener('click', this.hideCurrentMenu, { capture: true });
+	}
+	
+	private hideCurrentMenu = (event: MouseEvent) => {
+		if (this.currentMenu) {
+			this.currentMenu.hide();
+			this.currentMenu = null;
+			document.removeEventListener('click', this.hideCurrentMenu, { capture: true });
+		}
+	}
+
 	removeHomeIcon() {
 		const buttons = document.querySelectorAll('.homepage-button');
 		buttons.forEach(button => {
@@ -445,16 +537,16 @@ class AutoHideSettingTab extends PluginSettingTab {
 				}));
 
 		new Setting(containerEl)
-		.setName('Collapse sidebar on data type click')
-		.setDesc('Fold the sidebar when clicking on External links, MarkMind, Components, etc.')
-		.addToggle(toggle => toggle
-			.setValue(this.plugin.settings.collapseSidebar_onClickDataType)
-			.onChange(async (value) => {
-				this.plugin.settings.collapseSidebar_onClickDataType = value;
-				await this.plugin.saveSettings();
-				this.display(); // 重新渲染设置页面
-			}));
-	
+			.setName('Collapse sidebar on data type click')
+			.setDesc('Fold the sidebar when clicking on External links, MarkMind, Components, etc.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.collapseSidebar_onClickDataType)
+				.onChange(async (value) => {
+					this.plugin.settings.collapseSidebar_onClickDataType = value;
+					await this.plugin.saveSettings();
+					this.display(); // 重新渲染设置页面
+				}));
+
 		if (this.plugin.settings.collapseSidebar_onClickDataType) {
 			new Setting(containerEl)
 				.setName('Custom data types')
