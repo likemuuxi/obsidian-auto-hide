@@ -344,7 +344,6 @@ export default class AutoHidePlugin extends Plugin {
 				// 为每个按钮单独添加右键事件监听器
 				const folderNote = (this as any).app.plugins.enabledPlugins.has("folder-notes");
 				if (folderNote) {
-					console.log("folderNote");
 					homeButton.addEventListener('contextmenu', (e) => {
 						e.preventDefault(); // 阻止默认右键菜单的弹出
 						this.showFolderMenu(homeButton, e.clientX, e.clientY);
