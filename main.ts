@@ -89,6 +89,7 @@ export default class AutoHidePlugin extends Plugin {
 	private handleLayoutChange = () => {
 		// 获取当前活动的标签页
 		const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
+		const dataType = activeTab.getAttribute("data-type");
 
 		if (activeTab) {
 			// 检查面板是否处于分屏状态或堆叠状态
@@ -96,11 +97,11 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 
-			const dataType = activeTab.getAttribute("data-type");
 			if (dataType && this.settings.customDataTypes.includes(dataType)) {
 				this.handleDataType(dataType);
 			} else {
-				this.rightSplit.expand();
+				if (this.rightSplit.collapsed == true)
+					this.rightSplit.expand();
 			}
 		}
 	};
@@ -152,20 +153,20 @@ export default class AutoHidePlugin extends Plugin {
 	private observerCallback = (mutationsList: MutationRecord[], observer: MutationObserver) => {
 		for (const mutation of mutationsList) {
 			if (mutation.type === "attributes" && mutation.attributeName === "class") {
-				const target = mutation.target;
-				if (
-					(target as HTMLElement).matches &&
-					(target as HTMLElement).matches(".workspace-tab-header.is-active.mod-active") &&
-					(target as HTMLElement).getAttribute
-				) {
+				const target = mutation.target as HTMLElement;
+				const dataType = target.getAttribute("data-type");
+				if (target.matches(".workspace-tab-header.is-active.mod-active")) {
 					// 检查面板是否处于分屏状态或堆叠状态
-					if (this.isSplitScreen(target as HTMLElement) || this.isTabStacked(target as HTMLElement) || this.isModalOpen(target as HTMLElement)) {
+					if (this.isSplitScreen(target) || this.isTabStacked(target) || this.isModalOpen(target)) {
 						//this.rightSplit.collapse();
 						return;
 					}
-					const dataType = (target as HTMLElement).getAttribute("data-type");
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
+					} else {
+						if (this.rightSplit.collapsed) {
+							this.rightSplit.expand();
+						}
 					}
 				}
 			}
