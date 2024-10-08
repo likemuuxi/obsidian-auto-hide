@@ -164,7 +164,8 @@ export default class AutoHidePlugin extends Plugin {
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
 					} else {
-						if (this.rightSplit.collapsed) {
+						const isLeftSidebar = target.closest('.mod-top-left-space') !== null;
+						if (this.rightSplit.collapsed && !isLeftSidebar) {
 							this.rightSplit.expand();
 						}
 					}
