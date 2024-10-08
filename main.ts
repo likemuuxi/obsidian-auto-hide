@@ -188,15 +188,37 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 		}, { capture: true });
-		this.registerDomEvent(this.app.workspace.containerEl, "auxclick", (evt) => { // 右键在文件管理器中显示
+		// 右键点击显示菜单
+		this.registerDomEvent(this.app.workspace.containerEl, "contextmenu", (evt) => { 
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
 				evt.stopPropagation();
 				evt.preventDefault();
+
+				const target = evt.target as HTMLElement;
+				const x = evt.clientX;
+				const y = evt.clientY;
+
+				// 调用已有的 showBreadcrumbMenu 函数显示菜单
+				const folderNote = (this as any).app.plugins.enabledPlugins.has("folder-notes");
+				if(folderNote) {
+					this.showBreadcrumbMenu(target, x, y);
+				}
+			}
+		}, { capture: true });
+		// 双击触发在文件管理器中显示文件
+		this.registerDomEvent(this.app.workspace.containerEl, "dblclick", (evt) => {
+			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
+				evt.stopPropagation();
+				evt.preventDefault();
+
 				const dataPath = (evt.target as HTMLElement).dataset.path;
 				const fileExplorer = (this.app as any).internalPlugins.getPluginById("file-explorer");
+
 				if (fileExplorer && fileExplorer.enabled) {
 					const file = this.app.vault.getAbstractFileByPath(dataPath as string);
-					if (file) fileExplorer.instance.revealInFolder(file);
+					if (file) {
+						fileExplorer.instance.revealInFolder(file);
+					}
 				}
 			}
 		}, { capture: true });
@@ -244,7 +266,6 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 			if (((evt.target as HTMLElement).closest(".components--Component") !== null) && this.settings.collapseSidebar_onClickDataType) {
-				console.log("Matched .components--Component or child");
 				if (!this.settings.leftPinActive) {
 					this.leftSplit.collapse();
 					return;
@@ -340,26 +361,23 @@ export default class AutoHidePlugin extends Plugin {
 				const homeButton = document.createElement('div');
 				homeButton.textContent = 'HomePage';
 				homeButton.classList.add('homepage-button');
-	
-				// 为每个按钮单独添加右键事件监听器
-				const folderNote = (this as any).app.plugins.enabledPlugins.has("folder-notes");
-				if (folderNote) {
-					homeButton.addEventListener('contextmenu', (e) => {
-						e.preventDefault(); // 阻止默认右键菜单的弹出
-						this.showFolderMenu(homeButton, e.clientX, e.clientY);
-					});
-				}
 				parentElement.insertBefore(homeButton, viewHeaderTitleParent);
 			}
 		});
 	}
 	
-	private findFileInFolder(folder: string): { file: TFile | null, targetLeaf: any } {
+
+	private currentMenu: Menu | null = null;
+
+	private findFileInFolder(folder: string, parentPath: string): { file: TFile | null, targetLeaf: any } {
 		const fileExtensions = [".md", ".canvas"];
 		let file: TFile | null = null, targetLeaf;
-		const folderNotePath = `${folder}/${folder}`;
+	
+		// 处理路径构造
 		for (const ext of fileExtensions) {
-			const newPath = `${folderNotePath}${ext}`;
+			// 如果 parentPath 为空，则只使用 folder，避免在路径前添加 /
+			const newPath = parentPath ? `${parentPath}/${folder}/${folder}${ext}` : `${folder}/${folder}${ext}`;
+
 			const abstractFile = this.app.vault.getAbstractFileByPath(newPath);
 			if (abstractFile instanceof TFile) {
 				file = abstractFile;
@@ -371,37 +389,23 @@ export default class AutoHidePlugin extends Plugin {
 		return { file, targetLeaf };
 	}
 
-	private getRootFolders(): string[] {
-		const rootFolder = this.app.vault.getRoot();
-		return rootFolder.children
-			.filter(child => child instanceof TFolder)
-			.filter((folder: TFolder) => {
-				const fileExtensions = [".md", ".canvas"];
-				return fileExtensions.some(ext => {
-					const folderNotePath = `${folder.path}/${folder.name}${ext}`;
-					const file = this.app.vault.getAbstractFileByPath(folderNotePath);
-					return file !== null;
-				});
-			})
-			.map(folder => folder.name);
-	}
-
-	private currentMenu: Menu | null = null;
-
-	private showFolderMenu(button: HTMLElement, x: number, y: number) {
+	private showBreadcrumbMenu(target: HTMLElement, x: number, y: number) {
 		if (this.currentMenu) {
 			this.currentMenu.hide();
 		}
-	
-		const folders = this.getRootFolders();
+		// 获取data-path并解析出父文件夹路径
+		const dataPath = target.dataset.path as string;
+		const parentPath = dataPath.split('/').slice(0, -1).join('/'); // 获取父文件夹路径
+		const siblingFolders = this.getSiblingFolders(parentPath); // 获取同级文件夹
 		const menu = new Menu();
-	
-		folders.forEach(folder => {
+		
+		// 添加同级文件夹作为菜单项
+		siblingFolders.forEach(folder => {
 			menu.addItem(item => {
 				item.setTitle(folder)
 					.onClick((e) => {
-						console.log("click");
-						const { file, targetLeaf } = this.findFileInFolder(folder);
+						// 传递正确的 parentPath
+						const { file, targetLeaf } = this.findFileInFolder(folder, parentPath);
 						if (file) {
 							if (e.ctrlKey) {
 								this.app.workspace.openLinkText(file.path, "", true, { active: true });
@@ -417,16 +421,48 @@ export default class AutoHidePlugin extends Plugin {
 			});
 		});
 	
-		// 计算菜单位置并显示
+		// 显示菜单
 		menu.showAtPosition({ x, y });
-	
-		// 保存当前菜单
 		this.currentMenu = menu;
 	
 		// 点击页面其他地方时隐藏菜单栏
 		document.addEventListener('click', this.hideCurrentMenu, { capture: true });
 	}
 	
+	private getSiblingFolders(parentPath: string): string[] {
+		// 获取所有加载的文件
+		const allFiles = this.app.vault.getAllLoadedFiles();
+		const siblingFolders: string[] = [];
+	
+		// 遍历所有文件，找到同级文件夹
+		allFiles.forEach(file => {
+			// 确保文件是文件夹并且路径与父文件夹路径相同
+			if (file instanceof TFolder) {
+				const folderPath = file.path;
+				const parentFolderPath = folderPath.split('/').slice(0, -1).join('/');
+	
+				// 检查是否与目标父文件夹路径相同
+				if (parentFolderPath === parentPath) {
+					// 检查该文件夹中是否存在同名文件
+					const hasSameNameFile = allFiles.some((f) => 
+						f instanceof TFile && f.path === `${folderPath}/${file.name}.md` || 
+						f.path === `${folderPath}/${file.name}.canvas`
+					);
+	
+					// 只有在文件夹中存在同名文件时，才添加到菜单中
+					if (hasSameNameFile) {
+						siblingFolders.push(file.name); // 添加到同级文件夹数组
+					}
+				}
+			}
+		});
+
+		// 按照名称排序
+		siblingFolders.sort((a, b) => a.localeCompare(b));
+		return siblingFolders; // 返回同级文件夹名称数组
+	}	
+	
+
 	private hideCurrentMenu = (event: MouseEvent) => {
 		if (this.currentMenu) {
 			this.currentMenu.hide();
