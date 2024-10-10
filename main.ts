@@ -164,8 +164,7 @@ export default class AutoHidePlugin extends Plugin {
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
 					} else {
-						const isLeftSidebar = target.closest('.mod-top-left-space') !== null;
-						if (this.rightSplit.collapsed && !isLeftSidebar) {
+						if (dataType != "file-explorer") {
 							this.rightSplit.expand();
 						}
 					}
@@ -267,6 +266,13 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 			if (((evt.target as HTMLElement).closest(".components--Component") !== null) && this.settings.collapseSidebar_onClickDataType) {
+				if (!this.settings.leftPinActive) {
+					this.leftSplit.collapse();
+					return;
+				}
+				return;
+			}
+			if (((evt.target as HTMLElement).closest(".cm-mindmap-container") !== null) && this.settings.collapseSidebar_onClickDataType) {
 				if (!this.settings.leftPinActive) {
 					this.leftSplit.collapse();
 					return;
