@@ -164,7 +164,7 @@ export default class AutoHidePlugin extends Plugin {
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
 					} else {
-						if (dataType != "file-explorer") {
+						if (dataType != "file-explorer" && this.rightSplit.collapsed) {
 							this.rightSplit.expand();
 						}
 					}
