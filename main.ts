@@ -31,6 +31,7 @@ export default class AutoHidePlugin extends Plugin {
 	rightRibbonEl: HTMLElement;
 	workspaceContainerEl: HTMLElement;
 	private observer: MutationObserver;
+	private leftPinButton: ButtonComponent;
 
 	async onload() {
 		await this.loadSettings();
@@ -339,6 +340,21 @@ export default class AutoHidePlugin extends Plugin {
 				}
 			}
 		});
+		this.registerDomEvent(this.leftRibbonEl, "dblclick", async (evt) => {
+			if (this.settings.expandSidebar_onClickRibbon) {
+				if (evt.target == this.leftRibbonEl) {
+					if (this.leftSplit.collapsed == true)
+						this.leftSplit.expand();
+		
+					// 更新设置
+					this.settings.leftPinActive = true;
+					await this.saveSettings();
+					
+					// 使用保存的引用更新图标
+					this.updatePinButtonIcon();
+				}
+			}
+		});
 		this.registerDomEvent(this.rightRibbonEl, "click", (evt) => {
 			if (this.settings.expandSidebar_onClickRibbon) {
 				if (evt.target == this.rightRibbonEl) {
@@ -484,32 +500,50 @@ export default class AutoHidePlugin extends Plugin {
 			button.remove();
 		});
 	}
+	// addPins() {
+	// 	const tabHeaderContainers = document.getElementsByClassName("workspace-tab-header-container");
+	// 	const lb = new ButtonComponent(tabHeaderContainers[0] as HTMLElement)
+	// 		.setIcon(this.settings.leftPinActive ? "oah-pin-off" : "oah-pin")
+	// 		.setClass("auto-hide-button")
+	// 		.onClick(async () => {
+	// 			this.settings.leftPinActive = !this.settings.leftPinActive;
+	// 			await this.saveSettings();
+	// 			if (this.settings.leftPinActive) {
+	// 				lb.setIcon("oah-pin-off");
+	// 			} else {
+	// 				lb.setIcon("oah-pin");
+	// 			}
+	// 		});
+	// 	// const rb = new ButtonComponent(tabHeaderContainers[2] as HTMLElement)
+	// 	// .setIcon(this.settings.rightPinActive ? "oah-pin-off" : "oah-pin")
+	// 	// .setClass("auto-hide-button")
+	// 	// .onClick(async () => {
+	// 	// 	this.settings.rightPinActive = !this.settings.rightPinActive;
+	// 	// 	await this.saveSettings();
+	// 	// 	if (this.settings.rightPinActive) {
+	// 	// 		rb.setIcon("oah-pin-off");
+	// 	// 	} else {
+	// 	// 		rb.setIcon("oah-pin");
+	// 	// 	}
+	// 	// });
+	// }
 	addPins() {
 		const tabHeaderContainers = document.getElementsByClassName("workspace-tab-header-container");
-		const lb = new ButtonComponent(tabHeaderContainers[0] as HTMLElement)
+		this.leftPinButton = new ButtonComponent(tabHeaderContainers[0] as HTMLElement)
 			.setIcon(this.settings.leftPinActive ? "oah-pin-off" : "oah-pin")
 			.setClass("auto-hide-button")
 			.onClick(async () => {
 				this.settings.leftPinActive = !this.settings.leftPinActive;
 				await this.saveSettings();
-				if (this.settings.leftPinActive) {
-					lb.setIcon("oah-pin-off");
-				} else {
-					lb.setIcon("oah-pin");
-				}
+				this.updatePinButtonIcon();
 			});
-		// const rb = new ButtonComponent(tabHeaderContainers[2] as HTMLElement)
-		// .setIcon(this.settings.rightPinActive ? "oah-pin-off" : "oah-pin")
-		// .setClass("auto-hide-button")
-		// .onClick(async () => {
-		// 	this.settings.rightPinActive = !this.settings.rightPinActive;
-		// 	await this.saveSettings();
-		// 	if (this.settings.rightPinActive) {
-		// 		rb.setIcon("oah-pin-off");
-		// 	} else {
-		// 		rb.setIcon("oah-pin");
-		// 	}
-		// });
+		
+		this.updatePinButtonIcon();
+	}
+	private updatePinButtonIcon() {
+		if (this.leftPinButton) {
+			this.leftPinButton.setIcon(this.settings.leftPinActive ? "oah-pin-off" : "oah-pin");
+		}
 	}
 	removePins() {
 		const pins = document.getElementsByClassName("auto-hide-button");
