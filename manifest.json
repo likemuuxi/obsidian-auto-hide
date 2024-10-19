@@ -6,5 +6,5 @@
 	"description": "Collapse sidebars when clicking on the editor/viewer panel",
 	"author": "skelato1, Muuxi",
 	"authorUrl": "https://github.com/likemuuxi",
-	"isDesktopOnly": true
+	"isDesktopOnly": false
 }
