@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon, TFile, Menu, TFolder } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform } from 'obsidian';
 
 interface AutoHideSettings {
 	expandSidebar_onClickRibbon: boolean;
@@ -102,7 +102,9 @@ export default class AutoHidePlugin extends Plugin {
 				this.handleDataType(dataType);
 			} else {
 				if (this.rightSplit.collapsed == true)
-					this.rightSplit.expand();
+					if (!Platform.isMobile) {
+						this.rightSplit.expand();
+					}
 			}
 		}
 	};
@@ -166,7 +168,9 @@ export default class AutoHidePlugin extends Plugin {
 						this.handleDataType(dataType);
 					} else {
 						if (dataType != "file-explorer" && this.rightSplit.collapsed) {
-							this.rightSplit.expand();
+							if (!Platform.isMobile) {
+								this.rightSplit.expand();
+							}
 						}
 					}
 				}
@@ -320,8 +324,11 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 			if ((evt.target as HTMLElement).classList.contains("view-header-title") && this.settings.expandSidebar_onClickNoteTitle) {
-				if (this.leftSplit.collapsed == true)
-					this.leftSplit.expand();
+				if (this.leftSplit.collapsed == true) {
+					if (!Platform.isMobile) {
+						this.leftSplit.expand();
+					}
+				}
 				return;
 			}
 			if (!this.settings.leftPinActive) {
@@ -335,17 +342,22 @@ export default class AutoHidePlugin extends Plugin {
 		this.registerDomEvent(this.leftRibbonEl, "click", (evt) => {
 			if (this.settings.expandSidebar_onClickRibbon) {
 				if (evt.target == this.leftRibbonEl) {
-					if (this.leftSplit.collapsed == true)
-						this.leftSplit.expand();
+					if (this.leftSplit.collapsed == true) {
+						if (!Platform.isMobile) {
+							this.leftSplit.expand();
+						}
+					}
 				}
 			}
 		});
 		this.registerDomEvent(this.leftRibbonEl, "dblclick", async (evt) => {
 			if (this.settings.expandSidebar_onClickRibbon) {
 				if (evt.target == this.leftRibbonEl) {
-					if (this.leftSplit.collapsed == true)
-						this.leftSplit.expand();
-		
+					if (this.leftSplit.collapsed == true) {
+						if (!Platform.isMobile) {
+							this.leftSplit.expand();
+						}
+					}
 					// 更新设置
 					this.settings.leftPinActive = true;
 					await this.saveSettings();
@@ -358,8 +370,11 @@ export default class AutoHidePlugin extends Plugin {
 		this.registerDomEvent(this.rightRibbonEl, "click", (evt) => {
 			if (this.settings.expandSidebar_onClickRibbon) {
 				if (evt.target == this.rightRibbonEl) {
-					if (this.rightSplit.collapsed == true)
-						this.rightSplit.expand();
+					if (this.rightSplit.collapsed == true) {
+						if (!Platform.isMobile) {
+							this.rightSplit.expand();
+						}
+					}
 				}
 			}
 		});
