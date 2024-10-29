@@ -56,10 +56,10 @@ export default class AutoHidePlugin extends Plugin {
 			this.addHomeIcon();
 			this.handleLayoutChange();
 			// if (this.settings.leftPinActive) {
-			// 	this.leftSplit.expand();
+			// 	this.app.workspace.onLayoutReady(() => this.leftSplit.expand());
 			// }
 			// if (this.settings.rightPinActive) {
-			// 	this.rightSplit.expand();
+			//	this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
 			// }
 		});
 	}
@@ -103,7 +103,7 @@ export default class AutoHidePlugin extends Plugin {
 			} else {
 				if (this.rightSplit.collapsed == true)
 					if (!Platform.isMobile) {
-						this.rightSplit.expand();
+						this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
 					}
 			}
 		}
@@ -112,9 +112,9 @@ export default class AutoHidePlugin extends Plugin {
 	private handleDataType = (dataType: string) => {
 		if (this.settings.customDataTypes.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
 			if (!this.settings.leftPinActive) {
-				this.leftSplit.collapse();
+				this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 			}
-			this.rightSplit.collapse();
+			this.app.workspace.onLayoutReady(() => this.rightSplit.collapse());
 		}
 	};
 
@@ -159,9 +159,7 @@ export default class AutoHidePlugin extends Plugin {
 				const target = mutation.target as HTMLElement;
 				const dataType = target.getAttribute("data-type");
 				if (target.matches(".workspace-tab-header.is-active.mod-active")) {
-					// 检查面板是否处于分屏状态或堆叠状态
 					if (this.isSplitScreen(target) || this.isTabStacked(target) || this.isModalOpen(target)) {
-						//this.rightSplit.collapse();
 						return;
 					}
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
@@ -169,7 +167,7 @@ export default class AutoHidePlugin extends Plugin {
 					} else {
 						if (dataType != "file-explorer" && this.rightSplit.collapsed) {
 							if (!Platform.isMobile) {
-								this.rightSplit.expand();
+								this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
 							}
 						}
 					}
@@ -177,6 +175,7 @@ export default class AutoHidePlugin extends Plugin {
 			}
 		}
 	};
+	
 
 	registerEvents() {
 		this.registerDomEvent(this.app.workspace.containerEl, "focus", (evt) => {
@@ -261,25 +260,25 @@ export default class AutoHidePlugin extends Plugin {
 					}
 				}
 				if (!this.settings.leftPinActive) {
-					this.leftSplit.collapse();
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 				}
 			}
 			if (((evt.target as HTMLElement).closest(".contribution-widget, .mm-mindmap-container") !== null) && this.settings.collapseSidebar_onClickDataType) {
 				if (!this.settings.leftPinActive) {
-					this.leftSplit.collapse();
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 				}
 				return;
 			}
 			if (((evt.target as HTMLElement).closest(".components--Component") !== null) && this.settings.collapseSidebar_onClickDataType) {
 				if (!this.settings.leftPinActive) {
-					this.leftSplit.collapse();
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 					return;
 				}
 				return;
 			}
 			if (((evt.target as HTMLElement).closest(".cm-mindmap-container") !== null) && this.settings.collapseSidebar_onClickDataType) {
 				if (!this.settings.leftPinActive) {
-					this.leftSplit.collapse();
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 					return;
 				}
 				return;
@@ -319,23 +318,23 @@ export default class AutoHidePlugin extends Plugin {
 					}
 				}
 				if (!this.settings.leftPinActive) {
-					this.leftSplit.collapse();
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 				}
 				return;
 			}
 			if ((evt.target as HTMLElement).classList.contains("view-header-title") && this.settings.expandSidebar_onClickNoteTitle) {
 				if (this.leftSplit.collapsed == true) {
 					if (!Platform.isMobile) {
-						this.leftSplit.expand();
+						this.app.workspace.onLayoutReady(() => this.leftSplit.expand());
 					}
 				}
 				return;
 			}
 			if (!this.settings.leftPinActive) {
-				this.leftSplit.collapse();
+				this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
 			}
 			// if (!this.settings.rightPinActive) {
-			//   this.rightSplit.collapse();
+			//	this.app.workspace.onLayoutReady(() => this.rightSplit.collapse());
 			// }
 		});
 
@@ -344,7 +343,7 @@ export default class AutoHidePlugin extends Plugin {
 				if (evt.target == this.leftRibbonEl) {
 					if (this.leftSplit.collapsed == true) {
 						if (!Platform.isMobile) {
-							this.leftSplit.expand();
+							this.app.workspace.onLayoutReady(() => this.leftSplit.expand());
 						}
 					}
 				}
@@ -355,7 +354,7 @@ export default class AutoHidePlugin extends Plugin {
 				if (evt.target == this.leftRibbonEl) {
 					if (this.leftSplit.collapsed == true) {
 						if (!Platform.isMobile) {
-							this.leftSplit.expand();
+							this.app.workspace.onLayoutReady(() => this.leftSplit.expand());
 						}
 					}
 					// 更新设置
@@ -372,7 +371,7 @@ export default class AutoHidePlugin extends Plugin {
 				if (evt.target == this.rightRibbonEl) {
 					if (this.rightSplit.collapsed == true) {
 						if (!Platform.isMobile) {
-							this.rightSplit.expand();
+							this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
 						}
 					}
 				}
