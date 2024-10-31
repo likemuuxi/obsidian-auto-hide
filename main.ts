@@ -32,6 +32,7 @@ export default class AutoHidePlugin extends Plugin {
 	workspaceContainerEl: HTMLElement;
 	private observer: MutationObserver;
 	private leftPinButton: ButtonComponent;
+	private isMarkdownOpen = false;
 
 	async onload() {
 		await this.loadSettings();
@@ -40,6 +41,8 @@ export default class AutoHidePlugin extends Plugin {
 
 		addIcon("oah-pin", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`);
 		addIcon("oah-pin-off", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin-off"><line x1="2" y1="2" x2="22" y2="22"/><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14"/><path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89"/></svg>`);
+
+		this.setupTabClickListener();
 
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
@@ -87,6 +90,28 @@ export default class AutoHidePlugin extends Plugin {
 		this.rightRibbonEl = (this.app.workspace.rightRibbon as any).containerEl;
 	}
 
+	private setupTabClickListener() {
+		document.addEventListener("click", (event) => {
+			const target = event.target as HTMLElement;
+
+			if (target.matches(".workspace-tab-header")) {
+				const dataType = target.getAttribute("data-type");
+	
+				if (dataType === "markdown" && !Platform.isMobile) {
+					const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+					if (e) {
+						(this.app as any).commands.executeCommandById("outline:open");
+						setTimeout(() => {
+							const mainLeaf = this.app.workspace.getLeaf(false);
+							this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+							console.log("Switched focus back to main leaf.");
+						}, 100);
+					}
+				}
+			}
+		});
+	}
+
 	private handleLayoutChange = () => {
 		// 获取当前活动的标签页
 		const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
@@ -101,18 +126,11 @@ export default class AutoHidePlugin extends Plugin {
 			if (dataType && this.settings.customDataTypes.includes(dataType)) {
 				this.handleDataType(dataType);
 			} else {
-				if (this.rightSplit.collapsed == true)
+				if (this.rightSplit.collapsed == true) {
 					if (!Platform.isMobile) {
 						this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
-						var e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
-						if (e) {
-							(this.app as any).commands.executeCommandById("outline:open");
-							setTimeout(() => {
-								const mainLeaf = this.app.workspace.getLeaf(false);
-								this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-							}, 50);
-						}
 					}
+				}
 			}
 		}
 	};
@@ -170,20 +188,13 @@ export default class AutoHidePlugin extends Plugin {
 					if (this.isSplitScreen(target) || this.isTabStacked(target) || this.isModalOpen(target)) {
 						return;
 					}
+					
 					if (dataType && this.settings.customDataTypes.includes(dataType)) {
 						this.handleDataType(dataType);
 					} else {
 						if (dataType != "file-explorer" && this.rightSplit.collapsed) {
 							if (!Platform.isMobile) {
 								this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
-								var e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
-								if (e) {
-									(this.app as any).commands.executeCommandById("outline:open");
-									setTimeout(() => {
-										const mainLeaf = this.app.workspace.getLeaf(false); // 获取中间窗口的叶子
-										this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-									}, 50);
-								}
 							}
 						}
 					}
@@ -387,14 +398,6 @@ export default class AutoHidePlugin extends Plugin {
 					if (this.rightSplit.collapsed == true) {
 						if (!Platform.isMobile) {
 							this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
-							var e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
-							if (e) {
-								(this.app as any).commands.executeCommandById("outline:open");
-								setTimeout(() => {
-									const mainLeaf = this.app.workspace.getLeaf(false); // 获取中间窗口的叶子
-									this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-								}, 50);
-							}
 						}
 					}
 				}
