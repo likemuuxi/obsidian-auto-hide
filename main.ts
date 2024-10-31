@@ -32,7 +32,7 @@ export default class AutoHidePlugin extends Plugin {
 	workspaceContainerEl: HTMLElement;
 	private observer: MutationObserver;
 	private leftPinButton: ButtonComponent;
-	private isMarkdownOpen = false;
+	private clickListener: (event: MouseEvent) => void;
 
 	async onload() {
 		await this.loadSettings();
@@ -70,6 +70,7 @@ export default class AutoHidePlugin extends Plugin {
 	onunload() {
 		this.removePins();
 		this.observer.disconnect();
+		document.removeEventListener("click", this.clickListener);
 		this.app.workspace.off("layout-change", this.handleLayoutChange);
 	}
 
@@ -91,26 +92,31 @@ export default class AutoHidePlugin extends Plugin {
 	}
 
 	private setupTabClickListener() {
-		document.addEventListener("click", (event) => {
+		this.clickListener = (event) => {
 			const target = event.target as HTMLElement;
-
-			if (target.matches(".workspace-tab-header")) {
-				const dataType = target.getAttribute("data-type");
 	
-				if (dataType === "markdown" && !Platform.isMobile) {
-					const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
-					if (e) {
-						(this.app as any).commands.executeCommandById("outline:open");
-						setTimeout(() => {
-							const mainLeaf = this.app.workspace.getLeaf(false);
-							this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-							console.log("Switched focus back to main leaf.");
-						}, 100);
+			const headClass = target.closest(".workspace-tab-header-inner-title");
+			if (headClass) {
+				const header = headClass.closest(".workspace-tab-header");
+				if (header) {
+					const dataType = header.getAttribute("data-type");
+					if (dataType === "markdown" && !Platform.isMobile) {
+						const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+						if (e) {
+							(this.app as any).commands.executeCommandById("outline:open");
+							setTimeout(() => {
+								const mainLeaf = this.app.workspace.getLeaf(false);
+								this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+							}, 100);
+						}
 					}
 				}
 			}
-		});
+		};
+	
+		document.addEventListener("click", this.clickListener);
 	}
+	
 
 	private handleLayoutChange = () => {
 		// 获取当前活动的标签页
