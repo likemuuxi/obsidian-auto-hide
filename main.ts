@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, WorkspaceSidedock, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, WorkspaceSidedock, WorkspaceLeaf, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform } from 'obsidian';
 
 interface AutoHideSettings {
 	expandSidebar_onClickRibbon: boolean;
@@ -104,6 +104,14 @@ export default class AutoHidePlugin extends Plugin {
 				if (this.rightSplit.collapsed == true)
 					if (!Platform.isMobile) {
 						this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
+						var e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+						if (e) {
+							(this.app as any).commands.executeCommandById("outline:open");
+							setTimeout(() => {
+								const mainLeaf = this.app.workspace.getLeaf(false);
+								this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+							}, 50);
+						}
 					}
 			}
 		}
@@ -168,6 +176,14 @@ export default class AutoHidePlugin extends Plugin {
 						if (dataType != "file-explorer" && this.rightSplit.collapsed) {
 							if (!Platform.isMobile) {
 								this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
+								var e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+								if (e) {
+									(this.app as any).commands.executeCommandById("outline:open");
+									setTimeout(() => {
+										const mainLeaf = this.app.workspace.getLeaf(false); // 获取中间窗口的叶子
+										this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+									}, 50);
+								}
 							}
 						}
 					}
@@ -176,7 +192,6 @@ export default class AutoHidePlugin extends Plugin {
 		}
 	};
 	
-
 	registerEvents() {
 		this.registerDomEvent(this.app.workspace.containerEl, "focus", (evt) => {
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-title")) {
@@ -372,6 +387,14 @@ export default class AutoHidePlugin extends Plugin {
 					if (this.rightSplit.collapsed == true) {
 						if (!Platform.isMobile) {
 							this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
+							var e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+							if (e) {
+								(this.app as any).commands.executeCommandById("outline:open");
+								setTimeout(() => {
+									const mainLeaf = this.app.workspace.getLeaf(false); // 获取中间窗口的叶子
+									this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+								}, 50);
+							}
 						}
 					}
 				}
