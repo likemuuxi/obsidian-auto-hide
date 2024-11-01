@@ -1,4 +1,4 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, WorkspaceSidedock, WorkspaceLeaf, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, WorkspaceSidedock, WorkspaceLeaf, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView } from 'obsidian';
 
 interface AutoHideSettings {
 	expandSidebar_onClickRibbon: boolean;
@@ -101,11 +101,22 @@ export default class AutoHidePlugin extends Plugin {
 				if (header) {
 					const dataType = header.getAttribute("data-type");
 					if (dataType === "markdown" && !Platform.isMobile) {
-						const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
-						if (e) {
-							(this.app as any).commands.executeCommandById("outline:open");
+						// 检查是否存在固定状态图标
+						const pinnedStatusIcon = header.querySelector(".workspace-tab-header-status-icon.mod-pinned");
+						const isPinned = Boolean(pinnedStatusIcon);
+	
+						// 检查标签页是否固定
+						if (isPinned) {
+							new Notice("Pinned tab, no action taken.");
+							return;
+						} else {
+							new Notice("Unpinned tab, setting as active.");
+							const mainLeaf = this.app.workspace.getLeaf(false);
+							const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+							if (e) {
+								(this.app as any).commands.executeCommandById("outline:open");
+							}
 							setTimeout(() => {
-								const mainLeaf = this.app.workspace.getLeaf(false);
 								this.app.workspace.setActiveLeaf(mainLeaf, false, true);
 							}, 100);
 						}
@@ -115,9 +126,8 @@ export default class AutoHidePlugin extends Plugin {
 		};
 	
 		document.addEventListener("click", this.clickListener);
-	}
+	}	
 	
-
 	private handleLayoutChange = () => {
 		// 获取当前活动的标签页
 		const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
