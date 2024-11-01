@@ -107,10 +107,8 @@ export default class AutoHidePlugin extends Plugin {
 	
 						// 检查标签页是否固定
 						if (isPinned) {
-							new Notice("Pinned tab, no action taken.");
 							return;
 						} else {
-							new Notice("Unpinned tab, setting as active.");
 							const mainLeaf = this.app.workspace.getLeaf(false);
 							const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
 							if (e) {
