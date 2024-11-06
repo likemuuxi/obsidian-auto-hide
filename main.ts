@@ -94,7 +94,6 @@ export default class AutoHidePlugin extends Plugin {
 	private setupTabClickListener() {
 		this.clickListener = (event) => {
 			const target = event.target as HTMLElement;
-	
 			const headClass = target.closest(".workspace-tab-header-inner-title");
 			if (headClass) {
 				const header = headClass.closest(".workspace-tab-header");
@@ -116,7 +115,7 @@ export default class AutoHidePlugin extends Plugin {
 							}
 							setTimeout(() => {
 								this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-							}, 100);
+							}, 10);
 						}
 					}
 				}
@@ -124,31 +123,53 @@ export default class AutoHidePlugin extends Plugin {
 		};
 	
 		document.addEventListener("click", this.clickListener);
-	}	
+	}
 	
 	private handleLayoutChange = () => {
 		// 获取当前活动的标签页
 		const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
-		const dataType = activeTab.getAttribute("data-type");
-
+	
 		if (activeTab) {
+			const dataType = activeTab.getAttribute("data-type");
+			if (dataType == "markdown" && !Platform.isMobile) {
+				// 检查是否存在固定状态图标
+				const pinnedStatusIcon = activeTab.querySelector(".workspace-tab-header-status-icon.mod-pinned");
+				const isPinned = Boolean(pinnedStatusIcon);
+
+				// 检查标签页是否固定
+				if (isPinned) {
+					return;
+				} else {
+					const mainLeaf = this.app.workspace.getLeaf(false);
+					const outlinePlugin = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+					if (outlinePlugin) {
+						(this.app as any).commands.executeCommandById("outline:open");
+					}
+					setTimeout(() => {
+						this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+					}, 10);
+				}
+			}
+
 			// 检查面板是否处于分屏状态或堆叠状态
 			if (this.isSplitScreen(activeTab) || this.isTabStacked(activeTab) || this.isModalOpen(activeTab)) {
 				return;
 			}
-
+	
 			if (dataType && this.settings.customDataTypes.includes(dataType)) {
 				this.handleDataType(dataType);
 			} else {
 				if (this.rightSplit.collapsed == true) {
 					if (!Platform.isMobile) {
-						this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
+						this.app.workspace.onLayoutReady(() => {
+							this.rightSplit.expand();
+						});
 					}
 				}
 			}
 		}
-	};
-
+	};	
+	
 	private handleDataType = (dataType: string) => {
 		if (this.settings.customDataTypes.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
 			if (!this.settings.leftPinActive) {
@@ -182,7 +203,6 @@ export default class AutoHidePlugin extends Plugin {
 		const modal = root.querySelector('.modal');
 		return !!modal;
 	};
-
 
 	private startObserver() {
 		const config = {
