@@ -92,83 +92,84 @@ export default class AutoHidePlugin extends Plugin {
 	}
 
 	private setupTabClickListener() {
-		this.clickListener = (event) => {
+		this.clickListener = (event: MouseEvent) => {
 			const target = event.target as HTMLElement;
-			const headClass = target.closest(".workspace-tab-header-inner-title");
-			if (headClass) {
-				const header = headClass.closest(".workspace-tab-header");
-				if (header) {
-					const dataType = header.getAttribute("data-type");
-					if (dataType === "markdown" && !Platform.isMobile) {
-						// 检查是否存在固定状态图标
-						const pinnedStatusIcon = header.querySelector(".workspace-tab-header-status-icon.mod-pinned");
-						const isPinned = Boolean(pinnedStatusIcon);
+			
+			// 查找最近的 `.workspace-tab-header`
+			const header = target.closest(".workspace-tab-header") as HTMLElement;
+			if (!header) return;
 	
-						// 检查标签页是否固定
-						if (isPinned) {
-							return;
-						} else {
-							const mainLeaf = this.app.workspace.getLeaf(false);
-							const e = (this.app as any).internalPlugins.getEnabledPluginById("outline");
-							if (e) {
-								(this.app as any).commands.executeCommandById("outline:open");
-							}
-							setTimeout(() => {
-								this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-							}, 10);
-						}
-					}
+			const dataType = header.getAttribute("data-type");
+			const isPinned = Boolean(header.querySelector(".workspace-tab-header-status-icon.mod-pinned"));
+			
+			// 检查条件：仅在 Markdown 且非移动端且未固定的情况下执行
+			if (dataType !== "markdown" || Platform.isMobile || isPinned) {
+				return;
+			}
+	
+			const outlineAlreadyOpen = Array.from(this.app.workspace.getLeavesOfType("outline")).some(
+				(leaf: any) => leaf.view.containerEl.closest(".workspace-tab-header.is-active")
+			);
+			
+			if (!outlineAlreadyOpen) {
+				const mainLeaf = this.app.workspace.getLeaf(false);
+				const outlinePlugin = (this.app as any).internalPlugins.getEnabledPluginById("outline");
+			
+				if (outlinePlugin) {
+					(this.app as any).commands.executeCommandById("outline:open");
 				}
+			
+				requestAnimationFrame(() => {
+					this.app.workspace.setActiveLeaf(mainLeaf, false, true);
+				});
 			}
 		};
 	
-		document.addEventListener("click", this.clickListener);
+		// 添加点击监听器
+		document.addEventListener("click", this.clickListener, { once: true });
 	}
+	
 	
 	private handleLayoutChange = () => {
 		// 获取当前活动的标签页
-		const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
-	
-		if (activeTab) {
+		this.app.workspace.onLayoutReady(() => {
+			const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
+			if (!activeTab) return;
 			const dataType = activeTab.getAttribute("data-type");
-			if (dataType == "markdown" && !Platform.isMobile) {
-				// 检查是否存在固定状态图标
-				const pinnedStatusIcon = activeTab.querySelector(".workspace-tab-header-status-icon.mod-pinned");
-				const isPinned = Boolean(pinnedStatusIcon);
-
-				// 检查标签页是否固定
-				if (isPinned) {
-					return;
-				} else {
+			const isPinned = Boolean(activeTab.querySelector(".workspace-tab-header-status-icon.mod-pinned"));
+			// 若标签页是markdown且未固定，且非移动端，检查大纲视图
+			if (dataType === "markdown" && !isPinned && !Platform.isMobile) {
+				const activeOutlineTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active[data-type="outline"]') as HTMLElement;
+				if (!activeOutlineTab) {
 					const mainLeaf = this.app.workspace.getLeaf(false);
 					const outlinePlugin = (this.app as any).internalPlugins.getEnabledPluginById("outline");
 					if (outlinePlugin) {
 						(this.app as any).commands.executeCommandById("outline:open");
 					}
-					setTimeout(() => {
+
+					requestAnimationFrame(() => {
 						this.app.workspace.setActiveLeaf(mainLeaf, false, true);
-					}, 10);
+					});
 				}
 			}
 
-			// 检查面板是否处于分屏状态或堆叠状态
+			// 检查面板是否处于分屏、堆叠或模态状态
 			if (this.isSplitScreen(activeTab) || this.isTabStacked(activeTab) || this.isModalOpen(activeTab)) {
 				return;
 			}
-	
+
+			// 如果dataType是自定义类型
 			if (dataType && this.settings.customDataTypes.includes(dataType)) {
 				this.handleDataType(dataType);
 			} else {
-				if (this.rightSplit.collapsed == true) {
-					if (!Platform.isMobile) {
-						this.app.workspace.onLayoutReady(() => {
-							this.rightSplit.expand();
-						});
-					}
+				// 控制rightSplit展开
+				if (this.rightSplit.collapsed && !Platform.isMobile) {
+					this.rightSplit.expand();
 				}
 			}
-		}
-	};	
+		});
+	};
+	
 	
 	private handleDataType = (dataType: string) => {
 		if (this.settings.customDataTypes.includes(dataType) && this.settings.collapseSidebar_onClickDataType) {
