@@ -30,9 +30,13 @@ export default class AutoHidePlugin extends Plugin {
 	leftRibbonEl: HTMLElement;
 	rightRibbonEl: HTMLElement;
 	workspaceContainerEl: HTMLElement;
-	private observer: MutationObserver;
-	private leftPinButton: ButtonComponent;
 	private clickListener: (event: MouseEvent) => void;
+    private observer: MutationObserver | null = null;
+    private leftPinButton: ButtonComponent | null = null;
+    private currentMenu: Menu | null = null;
+    private menuCloseTimer: NodeJS.Timeout | null = null;
+    private isMouseOverMenu = false;
+    private layoutChangeHandler: (() => void) | null = null;
 
 	async onload() {
 		await this.loadSettings();
@@ -53,25 +57,40 @@ export default class AutoHidePlugin extends Plugin {
 			this.startObserver();
 		});
 		// Reassigned when workspace is switched
-		this.app.workspace.on("layout-change", () => {
+		this.layoutChangeHandler = () => {
 			this.init();
 			this.togglePins();
 			this.addHomeIcon();
 			this.handleLayoutChange();
-			// if (this.settings.leftPinActive) {
-			// 	this.app.workspace.onLayoutReady(() => this.leftSplit.expand());
-			// }
-			// if (this.settings.rightPinActive) {
-			//	this.app.workspace.onLayoutReady(() => this.rightSplit.expand());
-			// }
-		});
+		};
+
+		// 注册事件监听器
+		this.registerEvent(
+			this.app.workspace.on("layout-change", this.layoutChangeHandler)
+		);
 	}
 
 	onunload() {
 		this.removePins();
-		this.observer.disconnect();
+		if (this.observer) {
+			this.observer.disconnect();
+			this.observer = null;
+		}
 		document.removeEventListener("click", this.clickListener);
-		this.app.workspace.off("layout-change", this.handleLayoutChange);
+		
+		// 清理菜单相关
+		this.closeBreadcrumbMenu();
+		if (this.menuCloseTimer) {
+			clearTimeout(this.menuCloseTimer);
+			this.menuCloseTimer = null;
+		}
+	
+		// 清理 pin 按钮
+		if (this.leftPinButton) {
+			this.leftPinButton = null;
+		}
+	
+		this.isMouseOverMenu = false;
 	}
 
 	async loadSettings() {
@@ -129,8 +148,13 @@ export default class AutoHidePlugin extends Plugin {
 		document.addEventListener("click", this.clickListener, { once: true });
 	}
 	
-	
 	private handleLayoutChange = () => {
+		// 在处理新布局前清理旧的资源
+		this.closeBreadcrumbMenu();
+		if (this.menuCloseTimer) {
+			clearTimeout(this.menuCloseTimer);
+			this.menuCloseTimer = null;
+		}
 		// 获取当前活动的标签页
 		this.app.workspace.onLayoutReady(() => {
 			const activeTab = this.workspaceContainerEl.querySelector('.workspace-tab-header.is-active.mod-active') as HTMLElement;
@@ -211,7 +235,7 @@ export default class AutoHidePlugin extends Plugin {
 			attributeFilter: ["class"],
 			subtree: true,
 		};
-		this.observer.observe(this.workspaceContainerEl, config);
+		if(this.observer) this.observer.observe(this.workspaceContainerEl, config);
 	}
 
 	private observerCallback = (mutationsList: MutationRecord[], observer: MutationObserver) => {
@@ -253,23 +277,38 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 		}, { capture: true });
+		
 		// 右键点击显示菜单
-		this.registerDomEvent(this.app.workspace.containerEl, "contextmenu", (evt) => { 
+		// this.registerDomEvent(this.app.workspace.containerEl, "contextmenu", (evt) => { 
+		// 	if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
+		// 		evt.stopPropagation();
+		// 		evt.preventDefault();
+		// 		this.showMenuAtPosition(evt.target as HTMLElement, evt.clientX, evt.clientY);
+		// 	}
+		// }, { capture: true });
+
+		// 悬浮显示菜单
+		this.registerDomEvent(this.app.workspace.containerEl, "mouseover", (evt) => {
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
-				evt.stopPropagation();
-				evt.preventDefault();
-
-				const target = evt.target as HTMLElement;
-				const x = evt.clientX;
-				const y = evt.clientY;
-
-				// 调用已有的 showBreadcrumbMenu 函数显示菜单
-				const folderNote = (this as any).app.plugins.enabledPlugins.has("folder-notes");
-				if(folderNote) {
-					this.showBreadcrumbMenu(target, x, y);
+				// 清除已存在的定时器
+				if (this.menuCloseTimer) {
+					clearTimeout(this.menuCloseTimer);
+					this.menuCloseTimer = null;
+				}
+				this.showMenuAtPosition(evt.target as HTMLElement, evt.clientX, evt.clientY);
+			}
+		});
+		
+		this.registerDomEvent(this.app.workspace.containerEl, "mouseout", (evt) => {
+			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
+				if (!this.isMouseOverMenu) {
+					this.menuCloseTimer = setTimeout(() => {
+						this.closeBreadcrumbMenu();
+					}, 500);
 				}
 			}
-		}, { capture: true });
+		});
+
 		// 双击触发在文件管理器中显示文件
 		this.registerDomEvent(this.app.workspace.containerEl, "dblclick", (evt) => {
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
@@ -463,9 +502,6 @@ export default class AutoHidePlugin extends Plugin {
 			}
 		});
 	}
-	
-
-	private currentMenu: Menu | null = null;
 
 	private findFileInFolder(folder: string, parentPath: string): { file: TFile | null, targetLeaf: any } {
 		const fileExtensions = [".md", ".canvas"];
@@ -487,22 +523,28 @@ export default class AutoHidePlugin extends Plugin {
 		return { file, targetLeaf };
 	}
 
+	// 抽取共同的显示菜单逻辑
+	private showMenuAtPosition(target: HTMLElement, x: number, y: number): void {
+		const folderNote = (this as any).app.plugins.enabledPlugins.has("folder-notes");
+		if(folderNote) {
+			this.showBreadcrumbMenu(target, x, y);
+		}
+	}
+
 	private showBreadcrumbMenu(target: HTMLElement, x: number, y: number) {
 		if (this.currentMenu) {
 			this.currentMenu.hide();
 		}
-		// 获取data-path并解析出父文件夹路径
+		
 		const dataPath = target.dataset.path as string;
-		const parentPath = dataPath.split('/').slice(0, -1).join('/'); // 获取父文件夹路径
-		const siblingFolders = this.getSiblingFolders(parentPath); // 获取同级文件夹
+		const parentPath = dataPath.split('/').slice(0, -1).join('/');
+		const siblingFolders = this.getSiblingFolders(parentPath);
 		const menu = new Menu();
 		
-		// 添加同级文件夹作为菜单项
 		siblingFolders.forEach(folder => {
 			menu.addItem(item => {
 				item.setTitle(folder)
 					.onClick((e) => {
-						// 传递正确的 parentPath
 						const { file, targetLeaf } = this.findFileInFolder(folder, parentPath);
 						if (file) {
 							if (e.ctrlKey) {
@@ -515,16 +557,43 @@ export default class AutoHidePlugin extends Plugin {
 								}
 							}
 						}
+						this.closeBreadcrumbMenu();
 					});
 			});
 		});
-	
-		// 显示菜单
+
 		menu.showAtPosition({ x, y });
 		this.currentMenu = menu;
-	
-		// 点击页面其他地方时隐藏菜单栏
-		document.addEventListener('click', this.hideCurrentMenu, { capture: true });
+		
+		// 等待DOM更新后添加事件监听
+		requestAnimationFrame(() => {
+			const menuContainer = document.querySelector('.menu') as HTMLElement;
+			if (menuContainer) {
+				menuContainer.addEventListener('mouseenter', () => {
+					this.isMouseOverMenu = true;
+					if (this.menuCloseTimer) {
+						clearTimeout(this.menuCloseTimer);
+						this.menuCloseTimer = null;
+					}
+				});
+				
+				menuContainer.addEventListener('mouseleave', () => {
+					this.isMouseOverMenu = false;
+					this.menuCloseTimer = setTimeout(() => {
+						this.closeBreadcrumbMenu();
+					}, 500);
+				});
+			}
+		});
+	}
+
+	private closeBreadcrumbMenu(): void {
+		if (this.currentMenu) {
+			this.currentMenu.hide();
+			this.currentMenu = null;
+		}
+		// 移除可能存在的事件监听器
+		document.removeEventListener('click', this.hideCurrentMenu, { capture: true });
 	}
 	
 	private getSiblingFolders(parentPath: string): string[] {
