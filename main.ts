@@ -7,6 +7,7 @@ interface AutoHideSettings {
 	leftPinActive: boolean;
 	rightPinActive: boolean;
 	homepagePath: string;
+	homepageLink: string;
 	collapseSidebar_onClickDataType: boolean;
 	customDataTypes: string[];
 }
@@ -18,8 +19,9 @@ const DEFAULT_SETTINGS: AutoHideSettings = {
 	leftPinActive: false,
 	rightPinActive: false,
 	homepagePath: "",
+	homepageLink: "",
 	collapseSidebar_onClickDataType: true,
-	customDataTypes: ["surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"]
+	customDataTypes: ["webviewer", "surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"]
 }
 
 export default class AutoHidePlugin extends Plugin {
@@ -396,6 +398,45 @@ export default class AutoHidePlugin extends Plugin {
 			}
 		}, { capture: true });
 
+		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+			if ((evt.target as HTMLElement).classList.contains("homepage-button")) {
+				const activeLeaf = this.app.workspace.getLeaf(false);
+				const activeView = activeLeaf.view;  // 获取该标签页的视图对象
+			
+				const viewType = activeView.getViewType();
+				if (viewType != "webviewer") {
+					const file = this.app.vault.getAbstractFileByPath(this.settings.homepagePath);
+					if (file instanceof TFile) {
+						const leaves = this.app.workspace.getLeavesOfType("markdown");
+						const existingLeaf = leaves.find(leaf => (leaf.view as any).file?.path === file.path);
+
+						if (existingLeaf) {
+							const viewState =  existingLeaf.getViewState();
+							if (!viewState.pinned) {
+								this.app.workspace.setActiveLeaf(existingLeaf);
+							} else {
+								this.app.workspace.openLinkText(file.path, "", true, { active: true });
+							}
+						} else {
+							this.app.workspace.openLinkText(file.path, "", false, { active: true });
+						}
+					}
+				} else {
+					activeLeaf.setViewState({
+						type: "webviewer",
+						active: true,
+						state: {
+							url: this.settings.homepageLink,
+							target: "_self",
+						}
+					});
+				}
+				if (!this.settings.leftPinActive) {
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
+				}
+			}
+		});
+
 		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => {
 			if (!this.rootSplitEl.contains(evt.target as HTMLElement)) {
 				return;
@@ -414,23 +455,6 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 			if ((evt.target as HTMLElement).classList.contains("view-header-breadcrumb")) {
-				return;
-			}
-			if ((evt.target as HTMLElement).classList.contains("homepage-button")) {
-				const homepagePath = this.settings.homepagePath;
-				const file = this.app.vault.getAbstractFileByPath(homepagePath);
-				if (file instanceof TFile) {
-					const leaves = this.app.workspace.getLeavesOfType("markdown");
-					const existingLeaf = leaves.find(leaf => (leaf.view as any).file?.path === file.path);
-					if (existingLeaf) {
-						this.app.workspace.setActiveLeaf(existingLeaf);
-					} else {
-						this.app.workspace.openLinkText(file.path, "", false, { active: true });
-					}
-				}
-				if (!this.settings.leftPinActive) {
-					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
-				}
 				return;
 			}
 			if ((evt.target as HTMLElement).classList.contains("view-header-title") && this.settings.expandSidebar_onClickNoteTitle) {
@@ -598,8 +622,12 @@ export default class AutoHidePlugin extends Plugin {
 					menu.addItem(item => {
 						item.setTitle(displayName)
 							.setIcon("document")
-							.onClick(() => {
-								this.app.workspace.openLinkText(file.path, "", false, { active: true });
+							.onClick((e) => {
+								if (e.ctrlKey) {
+									this.app.workspace.openLinkText(file.path, "", true, { active: true });
+								} else {
+									this.app.workspace.openLinkText(file.path, "", false, { active: true });
+								}
 								this.closeBreadcrumbMenu();
 							});
 					});
@@ -804,6 +832,17 @@ class AutoHideSettingTab extends PluginSettingTab {
 				.setValue(this.plugin.settings.homepagePath)
 				.onChange(async (value) => {
 					this.plugin.settings.homepagePath = value;
+					await this.plugin.saveSettings();
+				}));
+
+		new Setting(containerEl)
+			.setName('HomePage Link')
+			.setDesc('Set the link of the web homepage.')
+			.addText(text => text
+				.setPlaceholder('Enter the path of the web homepage')
+				.setValue(this.plugin.settings.homepageLink)
+				.onChange(async (value) => {
+					this.plugin.settings.homepageLink = value;
 					await this.plugin.saveSettings();
 				}));
 
