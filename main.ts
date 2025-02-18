@@ -400,40 +400,44 @@ export default class AutoHidePlugin extends Plugin {
 
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
 			if ((evt.target as HTMLElement).classList.contains("homepage-button")) {
-				const activeLeaf = this.app.workspace.getLeaf(false);
-				const activeView = activeLeaf.view;  // 获取该标签页的视图对象
-			
-				const viewType = activeView.getViewType();
-				if (viewType != "webviewer") {
-					const file = this.app.vault.getAbstractFileByPath(this.settings.homepagePath);
-					if (file instanceof TFile) {
-						const leaves = this.app.workspace.getLeavesOfType("markdown");
-						const existingLeaf = leaves.find(leaf => (leaf.view as any).file?.path === file.path);
+				// const activeLeaf = this.app.workspace.getLeaf(false);
+				const activeLeaf = this.app.workspace.activeLeaf;
+				if (activeLeaf) {
+					const activeView = activeLeaf.view;  // 获取该标签页的视图对象
 
-						if (existingLeaf) {
-							const viewState =  existingLeaf.getViewState();
-							if (!viewState.pinned) {
-								this.app.workspace.setActiveLeaf(existingLeaf);
+					const viewType = activeView.getViewType();
+					if (viewType != "webviewer") {
+						const file = this.app.vault.getAbstractFileByPath(this.settings.homepagePath);
+						if (file instanceof TFile) {
+							const leaves = this.app.workspace.getLeavesOfType("markdown");
+							const existingLeaf = leaves.find(leaf => (leaf.view as any).file?.path === file.path);
+	
+							if (existingLeaf) {
+								const viewState =  existingLeaf.getViewState();
+								if (viewState.pinned) {
+									this.app.workspace.setActiveLeaf(existingLeaf);
+								} else {
+									this.app.workspace.openLinkText(file.path, "", false, { active: true });
+								}
 							} else {
-								this.app.workspace.openLinkText(file.path, "", true, { active: true });
+								this.app.workspace.openLinkText(file.path, "", false, { active: true });
 							}
-						} else {
-							this.app.workspace.openLinkText(file.path, "", false, { active: true });
 						}
+					} else {
+						activeLeaf.setViewState({
+							type: "webviewer",
+							active: true,
+							state: {
+								url: this.settings.homepageLink,
+								target: "_self",
+							}
+						});
 					}
-				} else {
-					activeLeaf.setViewState({
-						type: "webviewer",
-						active: true,
-						state: {
-							url: this.settings.homepageLink,
-							target: "_self",
-						}
-					});
 				}
-				if (!this.settings.leftPinActive) {
-					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
-				}
+
+				// if (!this.settings.leftPinActive) {
+				// 	this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
+				// }
 			}
 		});
 
