@@ -275,7 +275,20 @@ export default class AutoHidePlugin extends Plugin {
 		this.registerDomEvent(this.app.workspace.containerEl, "blur", (evt) => {
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-title")) {
 				setTimeout(() => {
+					// console.log("Available commands:", Object.keys((this.app as any).commands.commands));
 					this.addHomeIcon();
+
+					(this.app as any).commands.executeCommandById("workspace:edit-file-title");
+					
+					const escEvent = new KeyboardEvent("keydown", {
+						key: "Escape",
+						code: "Escape",
+						keyCode: 27,
+						which: 27,
+						bubbles: true
+					});
+					document.dispatchEvent(escEvent);
+
 				}, 200);
 				return;
 			}
