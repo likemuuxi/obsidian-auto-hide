@@ -274,23 +274,20 @@ export default class AutoHidePlugin extends Plugin {
 		}, { capture: true });
 		this.registerDomEvent(this.app.workspace.containerEl, "blur", (evt) => {
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-title")) {
-				setTimeout(() => {
-					// console.log("Available commands:", Object.keys((this.app as any).commands.commands));
-					this.addHomeIcon();
-
-					(this.app as any).commands.executeCommandById("workspace:edit-file-title");
-					
-					const escEvent = new KeyboardEvent("keydown", {
-						key: "Escape",
-						code: "Escape",
-						keyCode: 27,
-						which: 27,
-						bubbles: true
-					});
-					document.dispatchEvent(escEvent);
-
-				}, 200);
+				this.addHomeIcon();
 				return;
+				// setTimeout(() => {
+				// 	// console.log("Available commands:", Object.keys((this.app as any).commands.commands));
+				// 	(this.app as any).commands.executeCommandById("workspace:edit-file-title");
+				// 	const escEvent = new KeyboardEvent("keydown", {
+				// 		key: "Escape",
+				// 		code: "Escape",
+				// 		keyCode: 27,
+				// 		which: 27,
+				// 		bubbles: true
+				// 	});
+				// 	document.dispatchEvent(escEvent);
+				// }, 200);
 			}
 		}, { capture: true });
 		
@@ -413,7 +410,8 @@ export default class AutoHidePlugin extends Plugin {
 
 		this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
 			if ((evt.target as HTMLElement).classList.contains("homepage-button")) {
-				const activeLeaf = this.app.workspace.getLeaf(false);
+				const activeLeaf = this.app.workspace.getMostRecentLeaf();
+				if (!activeLeaf) return;
 				const activeView = activeLeaf.view;  // 获取该标签页的视图对象
 			
 				const viewType = activeView.getViewType();
@@ -428,7 +426,7 @@ export default class AutoHidePlugin extends Plugin {
 							if (!viewState.pinned) {
 								this.app.workspace.setActiveLeaf(existingLeaf);
 							} else {
-								this.app.workspace.openLinkText(file.path, "", true, { active: true });
+								this.app.workspace.revealLeaf(existingLeaf);
 							}
 						} else {
 							this.app.workspace.openLinkText(file.path, "", false, { active: true });
