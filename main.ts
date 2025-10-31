@@ -1,4 +1,20 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, WorkspaceSidedock, WorkspaceLeaf, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView } from 'obsidian';
+import { App, Plugin, PluginSettingTab, Setting, Notice, WorkspaceSidedock, WorkspaceLeaf, WorkspaceRibbon, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView, Editor } from 'obsidian';
+
+declare module 'obsidian' {
+	interface WorkspaceRibbon {
+		ribbonSettingEl: HTMLElement;
+		makeRibbonItemButton(icon: string, tooltip: string, onClick: (e: MouseEvent) => void): HTMLElement;
+	}
+
+	interface App {
+		setting: {
+			open: () => void;
+		};
+
+		openVaultChooser(): void;
+		openHelp(): void;
+	}
+}
 
 interface AutoHideSettings {
 	expandSidebar_onClickRibbon: boolean;
@@ -10,6 +26,9 @@ interface AutoHideSettings {
 	homepageLink: string;
 	collapseSidebar_onClickDataType: boolean;
 	customDataTypes: string[];
+	restoreVaultSwitcher: boolean;
+	restoreVaultActionsHelp: boolean;
+	restoreVaultActionsSettings: boolean;
 }
 
 const DEFAULT_SETTINGS: AutoHideSettings = {
@@ -21,7 +40,10 @@ const DEFAULT_SETTINGS: AutoHideSettings = {
 	homepagePath: "",
 	homepageLink: "",
 	collapseSidebar_onClickDataType: true,
-	customDataTypes: ["webviewer", "surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"]
+	customDataTypes: ["webviewer", "surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"],
+	restoreVaultSwitcher: true,
+	restoreVaultActionsHelp: true,
+	restoreVaultActionsSettings: true
 }
 
 export default class AutoHidePlugin extends Plugin {
@@ -40,11 +62,19 @@ export default class AutoHidePlugin extends Plugin {
     private menuCloseTimer: NodeJS.Timeout | null = null;
     private isMouseOverMenu = false;
     private layoutChangeHandler: (() => void) | null = null;
+	private ribbonMap: Map<string, HTMLElement> = new Map();
+	private ribbonStyleElements: Record<string, HTMLStyleElement> = {};
 
 	async onload() {
 		await this.loadSettings();
 
 		this.addSettingTab(new AutoHideSettingTab(this.app, this));
+
+		this.addCommand({
+			id: 'clean-markdown-formatting',
+			name: 'Clean up Markdown grammar',
+			editorCallback: (editor: Editor) => this.cleanMarkdownFormatting(editor)
+		});
 
 		addIcon("oah-pin", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`);
 		addIcon("oah-pin-off", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin-off"><line x1="2" y1="2" x2="22" y2="22"/><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14"/><path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89"/></svg>`);
@@ -54,6 +84,7 @@ export default class AutoHidePlugin extends Plugin {
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
 			this.togglePins();
+			this.updateRibbonButtons();
 
 			this.registerEvents();
 			this.observer = new MutationObserver(this.observerCallback.bind(this));
@@ -63,6 +94,7 @@ export default class AutoHidePlugin extends Plugin {
 		this.layoutChangeHandler = () => {
 			this.init();
 			this.togglePins();
+			this.updateRibbonButtons();
 			this.addHomeIcon();
 			this.handleLayoutChange();
 		};
@@ -80,7 +112,6 @@ export default class AutoHidePlugin extends Plugin {
 			this.observer = null;
 		}
 		document.removeEventListener("click", this.clickListener);
-		
 		// 清理菜单相关
 		this.closeBreadcrumbMenu();
 		if (this.menuCloseTimer) {
@@ -92,6 +123,11 @@ export default class AutoHidePlugin extends Plugin {
 		if (this.leftPinButton) {
 			this.leftPinButton = null;
 		}
+	
+		this.ribbonMap.forEach((el) => el.detach());
+		this.ribbonMap.clear();
+		Object.values(this.ribbonStyleElements).forEach((el) => el.remove());
+		this.ribbonStyleElements = {};
 	
 		this.isMouseOverMenu = false;
 	}
@@ -111,6 +147,112 @@ export default class AutoHidePlugin extends Plugin {
 		this.rootSplitEl = (this.app.workspace.rootSplit as any).containerEl;
 		this.leftRibbonEl = (this.app.workspace.leftRibbon as any).containerEl;
 		this.rightRibbonEl = (this.app.workspace.rightRibbon as any).containerEl;
+	}
+
+	updateRibbonButtons() {
+		if (!this.settings) {
+			return;
+		}
+
+		this.initializeVaultRibbonButtons();
+		this.toggleRibbonButton('vault', this.settings.restoreVaultSwitcher);
+		this.toggleRibbonButton('help', this.settings.restoreVaultActionsHelp);
+		this.toggleRibbonButton('settings', this.settings.restoreVaultActionsSettings);
+		this.applyVaultRibbonStyles();
+	}
+
+	private initializeVaultRibbonButtons() {
+		this.registerRibbonButton('vault', 'Switch vault', 'vault', () => this.app.openVaultChooser());
+		this.registerRibbonButton('help', 'Help', 'help', () => this.app.openHelp());
+		this.registerRibbonButton('settings', 'Settings', 'lucide-settings', () => this.app.setting.open());
+	}
+
+	private registerRibbonButton(id: string, tooltip: string, icon: string, onClick: () => void) {
+		if (this.ribbonMap.has(id)) {
+			return;
+		}
+
+		const leftRibbon = this.getWorkspaceRibbon();
+		if (!leftRibbon) {
+			return;
+		}
+
+		const button = leftRibbon.makeRibbonItemButton(icon, tooltip, (event: MouseEvent) => {
+			event.stopPropagation();
+			onClick();
+		});
+
+		this.ribbonMap.set(id, button);
+	}
+
+	private toggleRibbonButton(id: string, show: boolean) {
+		const leftRibbon = this.getWorkspaceRibbon();
+		const button = this.ribbonMap.get(id);
+
+		if (!leftRibbon || !button) {
+			return;
+		}
+
+		if (show) {
+			if (!button.isConnected) {
+				leftRibbon.ribbonSettingEl.appendChild(button);
+			}
+		} else {
+			button.detach();
+		}
+	}
+
+	private applyVaultRibbonStyles() {
+		const { restoreVaultSwitcher, restoreVaultActionsHelp, restoreVaultActionsSettings } = this.settings;
+		const allVisible = restoreVaultSwitcher && restoreVaultActionsHelp && restoreVaultActionsSettings;
+
+		this.updateRibbonStyle('vault-profile', `
+			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile {
+				display: ${allVisible ? 'none' : 'flex'};
+			}
+		`);
+
+		this.updateRibbonStyle('vault-switcher', `
+			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile .workspace-drawer-vault-switcher {
+				display: ${restoreVaultSwitcher ? 'none' : 'flex'};
+			}
+		`);
+
+		this.updateRibbonStyle('vault-actions-help', `
+			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile .workspace-drawer-vault-actions .clickable-icon:has(svg.svg-icon.help) {
+				display: ${restoreVaultActionsHelp ? 'none' : 'flex'};
+			}
+		`);
+
+		this.updateRibbonStyle('vault-actions-settings', `
+			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile .workspace-drawer-vault-actions .clickable-icon:has(svg.svg-icon.lucide-settings) {
+				display: ${restoreVaultActionsSettings ? 'none' : 'flex'};
+			}
+		`);
+	}
+
+	private updateRibbonStyle(id: string, css: string) {
+		const elementId = `auto-hide-${id}`;
+		let styleEl = this.ribbonStyleElements[id];
+
+		if (!styleEl) {
+			const existingEl = document.getElementById(elementId);
+			if (existingEl && existingEl instanceof HTMLStyleElement) {
+				styleEl = existingEl;
+			} else {
+				styleEl = document.createElement('style');
+				styleEl.id = elementId;
+				document.head.appendChild(styleEl);
+			}
+			this.ribbonStyleElements[id] = styleEl;
+		}
+
+		styleEl.textContent = css;
+	}
+
+	private getWorkspaceRibbon(): WorkspaceRibbon | null {
+		const leftRibbon = this.app.workspace.leftRibbon;
+		return leftRibbon ? (leftRibbon as WorkspaceRibbon) : null;
 	}
 
 	private setupTabClickListener() {
@@ -266,6 +408,20 @@ export default class AutoHidePlugin extends Plugin {
 	};
 	
 	registerEvents() {
+		this.registerDomEvent(this.app.workspace.containerEl, "dblclick", (evt) => {
+			const activeLeaf = this.app.workspace.getMostRecentLeaf();
+			if (!activeLeaf) return;
+
+			const view = activeLeaf.view;
+			if (view instanceof MarkdownView && view.getMode() === "preview") {
+				// Prevent default behavior
+				evt.preventDefault();
+				evt.stopPropagation();
+
+				// Execute the toggle edit/preview mode command
+				(this.app as any).commands.executeCommandById("markdown:toggle-preview");
+			}
+		});
 		this.registerDomEvent(this.app.workspace.containerEl, "focus", (evt) => {
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-title")) {
 				this.removeHomeIcon();
@@ -477,7 +633,9 @@ export default class AutoHidePlugin extends Plugin {
 				return;
 			}
 			if (!this.settings.leftPinActive) {
-				this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
+				if (!Platform.isMobile) {
+					this.app.workspace.onLayoutReady(() => this.leftSplit.collapse());
+				}
 			}
 			// if (!this.settings.rightPinActive) {
 			//	this.app.workspace.onLayoutReady(() => this.rightSplit.collapse());
@@ -786,6 +944,47 @@ export default class AutoHidePlugin extends Plugin {
 			}
 		}
 	}
+
+	// 清理Markdown标记的函数
+	cleanMarkdownFormatting(editor: Editor): void {
+		const selection = editor.getSelection();
+		
+		// 如果没有选中文本，则显示提示并返回
+		if (!selection || selection.trim() === '') {
+			new Notice('请先选择要清理的文本');
+			return;
+		}
+		
+		// 执行清理操作
+		let cleanedText = selection
+			// 移除粗体标记
+			.replace(/\*\*(.*?)\*\*/g, '$1')
+			// 移除斜体标记
+			.replace(/\*(.*?)\*/g, '$1')
+			.replace(/_(.*?)_/g, '$1')
+			// 移除删除线
+			.replace(/~~(.*?)~~/g, '$1')
+			// 移除高亮
+			.replace(/==(.*?)==/g, '$1')
+			// 移除行内代码
+			.replace(/`([^`]+)`/g, '$1')
+			// 移除链接，保留链接文本
+			.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+			// 移除标题标记
+			.replace(/^#+\s+(.*)$/gm, '$1')
+			// 移除引用标记
+			.replace(/^>\s+(.*)$/gm, '$1')
+			// 移除任务列表标记
+			.replace(/- \[[x ]\]\s+(.*)$/gim, '- $1')
+			// 移除无序列表标记
+			.replace(/^[*+-]\s+(.*)$/gm, '$1')
+			// 移除有序列表标记
+			.replace(/^\d+\.\s+(.*)$/gm, '$1');
+		
+		// 替换选中的文本
+		editor.replaceSelection(cleanedText);
+		new Notice('已清理选中文本的Markdown标记');
+	}
 }
 
 
@@ -801,6 +1000,41 @@ class AutoHideSettingTab extends PluginSettingTab {
 		const { containerEl } = this;
 		containerEl.empty();
 		containerEl.classList.add('auto-hide-plugin-settings');
+
+		new Setting(containerEl).setName('Vault Ribbon Buttons').setHeading();
+
+		new Setting(containerEl)
+			.setName('Show vault switcher')
+			.setDesc('Toggle the built-in vault switcher button in the ribbon.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.restoreVaultSwitcher)
+				.onChange(async (value) => {
+					this.plugin.settings.restoreVaultSwitcher = value;
+					await this.plugin.saveSettings();
+					this.plugin.updateRibbonButtons();
+				}));
+
+		new Setting(containerEl)
+			.setName('Show help button')
+			.setDesc('Toggle the built-in help button in the ribbon.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.restoreVaultActionsHelp)
+				.onChange(async (value) => {
+					this.plugin.settings.restoreVaultActionsHelp = value;
+					await this.plugin.saveSettings();
+					this.plugin.updateRibbonButtons();
+				}));
+
+		new Setting(containerEl)
+			.setName('Show settings button')
+			.setDesc('Toggle the built-in settings button in the ribbon.')
+			.addToggle(toggle => toggle
+				.setValue(this.plugin.settings.restoreVaultActionsSettings)
+				.onChange(async (value) => {
+					this.plugin.settings.restoreVaultActionsSettings = value;
+					await this.plugin.saveSettings();
+					this.plugin.updateRibbonButtons();
+				}));
 
 		new Setting(containerEl)
 			.setName('Expand the sidebar with a ribbon')
