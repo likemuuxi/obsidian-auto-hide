@@ -776,6 +776,9 @@ export default class AutoHidePlugin extends Plugin {
 		
 		const menu = new Menu();
 		
+		// 对文件夹进行升序排序
+		siblingFolders.sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+
 		siblingFolders.forEach(folder => {
 			menu.addItem(item => {
 				item.setTitle(folder)
@@ -803,33 +806,42 @@ export default class AutoHidePlugin extends Plugin {
 		// 获取目标文件夹内的文件，排除目标文件夹本身
 		const targetFolderFiles = this.app.vault.getAbstractFileByPath(currentPath);
 		if (targetFolderFiles instanceof TFolder) {
-			targetFolderFiles.children.forEach(file => {
-				if (file instanceof TFile) {
-					// console.log("file: " + file.path);
-					// 排除与目标文件夹同名的文件
+			// 获取当前文件的名称
+			const file = this.app.workspace.getActiveFile();
+			let activateFileName = "";
+			if (file instanceof TFile) {
+				activateFileName = file.name;
+			}
+
+			// 对文件进行升序排序，排除与目标文件夹和当前文件同名的文件
+			const sortedFiles = targetFolderFiles.children
+				.filter(file => file instanceof TFile)
+				.filter(file => {
 					const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, ""); // 移除文件扩展名
-					if (fileNameWithoutExt === currentFolder) {
-						return;
-					}
+					const activateFileNameWithoutExt = activateFileName.replace(/\.[^/.]+$/, ""); // 当前文件名（去除扩展名）
+					// 排除与目标文件夹和当前文件同名的文件
+					return fileNameWithoutExt !== currentFolder && fileNameWithoutExt !== activateFileNameWithoutExt;
+				})
+				.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
 
-					// 设置显示的文件名（.md文件不显示后缀）
-					const displayName = file.extension === 'md' 
-						? fileNameWithoutExt 
-						: file.name;
+			sortedFiles.forEach(file => {
+				// 设置显示的文件名（.md文件不显示后缀）
+				const displayName = file.extension === 'md'
+					? file.name.replace(/\.[^/.]+$/, "")  // 移除文件扩展名
+					: file.name;
 
-					menu.addItem(item => {
-						item.setTitle(displayName)
-							.setIcon("document")
-							.onClick((e) => {
-								if (e.ctrlKey) {
-									this.app.workspace.openLinkText(file.path, "", true, { active: true });
-								} else {
-									this.app.workspace.openLinkText(file.path, "", false, { active: true });
-								}
-								this.closeBreadcrumbMenu();
-							});
-					});
-				}
+				menu.addItem(item => {
+					item.setTitle(displayName)
+						.setIcon("document")
+						.onClick((e) => {
+							if (e.ctrlKey) {
+								this.app.workspace.openLinkText(file.path, "", true, { active: true });
+							} else {
+								this.app.workspace.openLinkText(file.path, "", false, { active: true });
+							}
+							this.closeBreadcrumbMenu();
+						});
+				});
 			});
 		}
 		menu.showAtPosition({ x, y });
