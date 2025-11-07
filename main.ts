@@ -505,7 +505,7 @@ export default class AutoHidePlugin extends Plugin {
 				}
 			}
 		}, { capture: true });
-		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => { // 阻止 folder note 弹出文件管理器
+		this.registerDomEvent(this.app.workspace.containerEl, "click", (evt) => { // 阻止 folder note 弹出文件管理器 
 			if (evt.target && (evt.target as HTMLElement).classList.contains("view-header-breadcrumb") && (evt.target as HTMLElement).classList.contains("has-folder-note")) {
 				evt.stopPropagation();
 				evt.preventDefault();
@@ -739,10 +739,38 @@ export default class AutoHidePlugin extends Plugin {
 		if (this.currentMenu) {
 			this.currentMenu.hide();
 		}
-		
-		const dataPath = target.dataset.path as string;
-		const currentFolder = dataPath.split('/').pop() || ''; // 获取当前文件夹名
-		const parentPath = dataPath.split('/').slice(0, -1).join('/');
+
+		// const dataPath = target.dataset.path as string;
+		// console.log("dataPath: " + dataPath);
+		// const file = this.app.workspace.getActiveFile();
+
+		// let fullPath;
+		// if (file instanceof TFile) {
+		// 	fullPath = file.path; // 例如 "Cannoli College/2. Special arrows.md"
+		// 	console.log("file path: " + fullPath);
+		// }
+
+		// const currentFolder = (target.ariaLabel as string).split('/').pop() || ''; // 获取当前文件夹名
+		// console.log("currentFolder: " + currentFolder);
+
+		// // 取出当前文件的上一级文件夹路径
+		// let parentPath = "";
+		// let currentPath = "";
+		// if (fullPath && fullPath.includes(currentFolder)) {
+		// 	parentPath = fullPath.split(`/${currentFolder}`)[0];
+		// 	if (!parentPath.includes("/")) {
+		// 		parentPath = "";
+		// 		currentPath = currentFolder;
+		// 	} else {
+		// 		currentPath = parentPath + "/" + currentFolder;
+		// 	}
+		// }
+		// console.log("parentPath:", parentPath);
+		// console.log("currentPath:", currentPath);
+
+		const { parentPath, currentPath } = this.getPathsFromBreadcrumb(target);
+		const currentFolder = currentPath.split('/').pop() || '';
+
 		const siblingFolders = this.getSiblingFolders(parentPath)
 			.filter(folder => folder !== currentFolder); // 排除当前文件夹
 		
@@ -773,10 +801,11 @@ export default class AutoHidePlugin extends Plugin {
 		menu.addSeparator();
 
 		// 获取目标文件夹内的文件，排除目标文件夹本身
-		const targetFolderFiles = this.app.vault.getAbstractFileByPath(dataPath);
+		const targetFolderFiles = this.app.vault.getAbstractFileByPath(currentPath);
 		if (targetFolderFiles instanceof TFolder) {
 			targetFolderFiles.children.forEach(file => {
 				if (file instanceof TFile) {
+					// console.log("file: " + file.path);
 					// 排除与目标文件夹同名的文件
 					const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, ""); // 移除文件扩展名
 					if (fileNameWithoutExt === currentFolder) {
@@ -841,6 +870,36 @@ export default class AutoHidePlugin extends Plugin {
 		}
 		// 移除可能存在的事件监听器
 		document.removeEventListener('click', this.hideCurrentMenu, { capture: true });
+	}
+
+	private getPathsFromBreadcrumb(target: HTMLElement): { currentPath: string; parentPath: string } {
+		// 1) 父容器
+		const container = target.closest(".view-header-title-parent") as HTMLElement | null;
+		if (!container) return { currentPath: "", parentPath: "" };
+
+		// 2) 所有层级段
+		const crumbs = Array.from(container.querySelectorAll<HTMLElement>(".view-header-breadcrumb"));
+		const idx = crumbs.indexOf(target);
+		if (idx < 0) return { currentPath: "", parentPath: "" };
+
+		// 3) 抽取每段的名称
+		//    首段若存在 data-path 则优先使用. 其余段使用 aria-label 或文本
+		const segs = crumbs.map((el, i) => {
+			if (i === 0) {
+			const dp = (el as HTMLElement).dataset?.path?.trim();
+			if (dp) return dp; // 如 "Cannoli College"
+			}
+			return el.getAttribute("aria-label")?.trim() || el.textContent?.trim() || "";
+		});
+
+		// 4) 只保留有效段
+		const clean = segs.filter(Boolean);
+
+		// 5) 计算 currentPath 与 parentPath
+		const currentPath = clean.slice(0, idx + 1).join("/");              // 被点这一层的完整路径
+		const parentPath = idx === 0 ? "" : clean.slice(0, idx).join("/");  // 根目录返回空字符串
+
+		return { currentPath, parentPath };
 	}
 	
 	private getSiblingFolders(parentPath: string): string[] {

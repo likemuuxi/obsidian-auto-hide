@@ -1,3 +1,13 @@
+.menu-item-title {
+	max-width: 200px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	display: inline-block;
+	vertical-align: middle;
+}
+
+
 .auto-hide-button {
     display: flex;
     margin: 7px 6px 0 auto;
