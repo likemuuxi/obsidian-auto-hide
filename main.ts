@@ -1,4 +1,8 @@
-import { App, Plugin, PluginSettingTab, Setting, Notice, WorkspaceSidedock, WorkspaceLeaf, WorkspaceRibbon, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView, Editor } from 'obsidian';
+import { Plugin, WorkspaceSidedock, WorkspaceLeaf, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView, Editor } from 'obsidian';
+import AutoHideSettingTab from './setting-tab';
+import { AutoHideSettings, DEFAULT_SETTINGS } from './settings';
+import { cleanMarkdownFormatting } from './markdown-utils';
+import RibbonManager from './ribbon-manager';
 
 declare module 'obsidian' {
 	interface WorkspaceRibbon {
@@ -14,36 +18,6 @@ declare module 'obsidian' {
 		openVaultChooser(): void;
 		openHelp(): void;
 	}
-}
-
-interface AutoHideSettings {
-	expandSidebar_onClickRibbon: boolean;
-	expandSidebar_onClickNoteTitle: boolean;
-	lockSidebar: boolean;
-	leftPinActive: boolean;
-	rightPinActive: boolean;
-	homepagePath: string;
-	homepageLink: string;
-	collapseSidebar_onClickDataType: boolean;
-	customDataTypes: string[];
-	restoreVaultSwitcher: boolean;
-	restoreVaultActionsHelp: boolean;
-	restoreVaultActionsSettings: boolean;
-}
-
-const DEFAULT_SETTINGS: AutoHideSettings = {
-	expandSidebar_onClickRibbon: true,
-	expandSidebar_onClickNoteTitle: false,
-	lockSidebar: false,
-	leftPinActive: false,
-	rightPinActive: false,
-	homepagePath: "",
-	homepageLink: "",
-	collapseSidebar_onClickDataType: true,
-	customDataTypes: ["webviewer", "surfing-view", "canvas", "excalidraw", "mindmapview", "excel-view", "vscode-editor", "code-editor"],
-	restoreVaultSwitcher: true,
-	restoreVaultActionsHelp: true,
-	restoreVaultActionsSettings: true
 }
 
 export default class AutoHidePlugin extends Plugin {
@@ -62,18 +36,19 @@ export default class AutoHidePlugin extends Plugin {
     private menuCloseTimer: NodeJS.Timeout | null = null;
     private isMouseOverMenu = false;
     private layoutChangeHandler: (() => void) | null = null;
-	private ribbonMap: Map<string, HTMLElement> = new Map();
-	private ribbonStyleElements: Record<string, HTMLStyleElement> = {};
+	private ribbonManager: RibbonManager | null = null;
 
+	// ===== Lifecycle & Settings =====
 	async onload() {
 		await this.loadSettings();
+		this.ribbonManager = new RibbonManager(this);
 
 		this.addSettingTab(new AutoHideSettingTab(this.app, this));
 
 		this.addCommand({
 			id: 'clean-markdown-formatting',
 			name: 'Clean up Markdown grammar',
-			editorCallback: (editor: Editor) => this.cleanMarkdownFormatting(editor)
+			editorCallback: (editor: Editor) => cleanMarkdownFormatting(editor)
 		});
 
 		addIcon("oah-pin", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`);
@@ -123,11 +98,9 @@ export default class AutoHidePlugin extends Plugin {
 		if (this.leftPinButton) {
 			this.leftPinButton = null;
 		}
-	
-		this.ribbonMap.forEach((el) => el.detach());
-		this.ribbonMap.clear();
-		Object.values(this.ribbonStyleElements).forEach((el) => el.remove());
-		this.ribbonStyleElements = {};
+		if (this.ribbonManager) {
+			this.ribbonManager.cleanup();
+		}
 	
 		this.isMouseOverMenu = false;
 	}
@@ -140,6 +113,7 @@ export default class AutoHidePlugin extends Plugin {
 		await this.saveData(this.settings);
 	}
 
+	// ===== Workspace & Layout =====
 	init() {
 		this.leftSplit = this.app.workspace.leftSplit;
 		this.rightSplit = this.app.workspace.rightSplit;
@@ -147,112 +121,6 @@ export default class AutoHidePlugin extends Plugin {
 		this.rootSplitEl = (this.app.workspace.rootSplit as any).containerEl;
 		this.leftRibbonEl = (this.app.workspace.leftRibbon as any).containerEl;
 		this.rightRibbonEl = (this.app.workspace.rightRibbon as any).containerEl;
-	}
-
-	updateRibbonButtons() {
-		if (!this.settings) {
-			return;
-		}
-
-		this.initializeVaultRibbonButtons();
-		this.toggleRibbonButton('vault', this.settings.restoreVaultSwitcher);
-		this.toggleRibbonButton('help', this.settings.restoreVaultActionsHelp);
-		this.toggleRibbonButton('settings', this.settings.restoreVaultActionsSettings);
-		this.applyVaultRibbonStyles();
-	}
-
-	private initializeVaultRibbonButtons() {
-		this.registerRibbonButton('vault', 'Switch vault', 'vault', () => this.app.openVaultChooser());
-		this.registerRibbonButton('help', 'Help', 'help', () => this.app.openHelp());
-		this.registerRibbonButton('settings', 'Settings', 'lucide-settings', () => this.app.setting.open());
-	}
-
-	private registerRibbonButton(id: string, tooltip: string, icon: string, onClick: () => void) {
-		if (this.ribbonMap.has(id)) {
-			return;
-		}
-
-		const leftRibbon = this.getWorkspaceRibbon();
-		if (!leftRibbon) {
-			return;
-		}
-
-		const button = leftRibbon.makeRibbonItemButton(icon, tooltip, (event: MouseEvent) => {
-			event.stopPropagation();
-			onClick();
-		});
-
-		this.ribbonMap.set(id, button);
-	}
-
-	private toggleRibbonButton(id: string, show: boolean) {
-		const leftRibbon = this.getWorkspaceRibbon();
-		const button = this.ribbonMap.get(id);
-
-		if (!leftRibbon || !button) {
-			return;
-		}
-
-		if (show) {
-			if (!button.isConnected) {
-				leftRibbon.ribbonSettingEl.appendChild(button);
-			}
-		} else {
-			button.detach();
-		}
-	}
-
-	private applyVaultRibbonStyles() {
-		const { restoreVaultSwitcher, restoreVaultActionsHelp, restoreVaultActionsSettings } = this.settings;
-		const allVisible = restoreVaultSwitcher && restoreVaultActionsHelp && restoreVaultActionsSettings;
-
-		this.updateRibbonStyle('vault-profile', `
-			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile {
-				display: ${allVisible ? 'none' : 'flex'};
-			}
-		`);
-
-		this.updateRibbonStyle('vault-switcher', `
-			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile .workspace-drawer-vault-switcher {
-				display: ${restoreVaultSwitcher ? 'none' : 'flex'};
-			}
-		`);
-
-		this.updateRibbonStyle('vault-actions-help', `
-			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile .workspace-drawer-vault-actions .clickable-icon:has(svg.svg-icon.help) {
-				display: ${restoreVaultActionsHelp ? 'none' : 'flex'};
-			}
-		`);
-
-		this.updateRibbonStyle('vault-actions-settings', `
-			body:not(.is-mobile) .workspace-split.mod-left-split .workspace-sidedock-vault-profile .workspace-drawer-vault-actions .clickable-icon:has(svg.svg-icon.lucide-settings) {
-				display: ${restoreVaultActionsSettings ? 'none' : 'flex'};
-			}
-		`);
-	}
-
-	private updateRibbonStyle(id: string, css: string) {
-		const elementId = `auto-hide-${id}`;
-		let styleEl = this.ribbonStyleElements[id];
-
-		if (!styleEl) {
-			const existingEl = document.getElementById(elementId);
-			if (existingEl && existingEl instanceof HTMLStyleElement) {
-				styleEl = existingEl;
-			} else {
-				styleEl = document.createElement('style');
-				styleEl.id = elementId;
-				document.head.appendChild(styleEl);
-			}
-			this.ribbonStyleElements[id] = styleEl;
-		}
-
-		styleEl.textContent = css;
-	}
-
-	private getWorkspaceRibbon(): WorkspaceRibbon | null {
-		const leftRibbon = this.app.workspace.leftRibbon;
-		return leftRibbon ? (leftRibbon as WorkspaceRibbon) : null;
 	}
 
 	private setupTabClickListener() {
@@ -374,6 +242,12 @@ export default class AutoHidePlugin extends Plugin {
 		return !!modal;
 	};
 
+	// ===== Ribbon Management =====
+	updateRibbonButtons() {
+		this.ribbonManager?.updateRibbonButtons();
+	}
+
+	// ===== Workspace Events & Observers =====
 	private startObserver() {
 		const config = {
 			attributes: true,
@@ -683,16 +557,7 @@ export default class AutoHidePlugin extends Plugin {
 		});
 	}
 
-	togglePins() {
-		if (!this.settings.lockSidebar) {
-			this.removePins();
-			return;
-		}
-		if (document.getElementsByClassName("auto-hide-button").length == 0) {
-			this.addPins();
-		}
-	}
-
+	// ===== Homepage & Breadcrumb Navigation =====
 	addHomeIcon() {
 		const viewHeaderTitleParents = document.querySelectorAll('.view-header-title-parent');
 	
@@ -707,6 +572,12 @@ export default class AutoHidePlugin extends Plugin {
 		});
 	}
 
+	removeHomeIcon() {
+		const buttons = document.querySelectorAll('.homepage-button');
+		buttons.forEach(button => {
+			button.remove();
+		});
+	}
 	private findFileInFolder(folder: string, parentPath: string): { file: TFile | null, targetLeaf: any } {
 		const fileExtensions = [".md", ".canvas"];
 		let file: TFile | null = null, targetLeaf;
@@ -956,12 +827,17 @@ export default class AutoHidePlugin extends Plugin {
 		}
 	}
 
-	removeHomeIcon() {
-		const buttons = document.querySelectorAll('.homepage-button');
-		buttons.forEach(button => {
-			button.remove();
-		});
+	// ===== Sidebar Pin Controls =====
+	togglePins() {
+		if (!this.settings.lockSidebar) {
+			this.removePins();
+			return;
+		}
+		if (document.getElementsByClassName("auto-hide-button").length == 0) {
+			this.addPins();
+		}
 	}
+
 	// addPins() {
 	// 	const tabHeaderContainers = document.getElementsByClassName("workspace-tab-header-container");
 	// 	const lb = new ButtonComponent(tabHeaderContainers[0] as HTMLElement)
@@ -989,6 +865,7 @@ export default class AutoHidePlugin extends Plugin {
 	// 	// 	}
 	// 	// });
 	// }
+
 	addPins() {
 		const tabHeaderContainers = document.getElementsByClassName("workspace-tab-header-container");
 		this.leftPinButton = new ButtonComponent(tabHeaderContainers[0] as HTMLElement)
@@ -1002,11 +879,7 @@ export default class AutoHidePlugin extends Plugin {
 		
 		this.updatePinButtonIcon();
 	}
-	private updatePinButtonIcon() {
-		if (this.leftPinButton) {
-			this.leftPinButton.setIcon(this.settings.leftPinActive ? "oah-pin-off" : "oah-pin");
-		}
-	}
+
 	removePins() {
 		const pins = document.getElementsByClassName("auto-hide-button");
 		while (pins.length) {
@@ -1015,175 +888,10 @@ export default class AutoHidePlugin extends Plugin {
 			}
 		}
 	}
-
-	// 清理Markdown标记的函数
-	cleanMarkdownFormatting(editor: Editor): void {
-		const selection = editor.getSelection();
-		
-		// 如果没有选中文本，则显示提示并返回
-		if (!selection || selection.trim() === '') {
-			new Notice('请先选择要清理的文本');
-			return;
-		}
-		
-		// 执行清理操作
-		let cleanedText = selection
-			// 移除粗体标记
-			.replace(/\*\*(.*?)\*\*/g, '$1')
-			// 移除斜体标记
-			.replace(/\*(.*?)\*/g, '$1')
-			.replace(/_(.*?)_/g, '$1')
-			// 移除删除线
-			.replace(/~~(.*?)~~/g, '$1')
-			// 移除高亮
-			.replace(/==(.*?)==/g, '$1')
-			// 移除行内代码
-			.replace(/`([^`]+)`/g, '$1')
-			// 移除链接，保留链接文本
-			.replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
-			// 移除标题标记
-			.replace(/^#+\s+(.*)$/gm, '$1')
-			// 移除引用标记
-			.replace(/^>\s+(.*)$/gm, '$1')
-			// 移除任务列表标记
-			.replace(/- \[[x ]\]\s+(.*)$/gim, '- $1')
-			// 移除无序列表标记
-			.replace(/^[*+-]\s+(.*)$/gm, '$1')
-			// 移除有序列表标记
-			.replace(/^\d+\.\s+(.*)$/gm, '$1');
-		
-		// 替换选中的文本
-		editor.replaceSelection(cleanedText);
-		new Notice('已清理选中文本的Markdown标记');
-	}
-}
-
-
-class AutoHideSettingTab extends PluginSettingTab {
-	plugin: AutoHidePlugin;
-
-	constructor(app: App, plugin: AutoHidePlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-		containerEl.classList.add('auto-hide-plugin-settings');
-
-		new Setting(containerEl).setName('Vault Ribbon Buttons').setHeading();
-
-		new Setting(containerEl)
-			.setName('Show vault switcher')
-			.setDesc('Toggle the built-in vault switcher button in the ribbon.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.restoreVaultSwitcher)
-				.onChange(async (value) => {
-					this.plugin.settings.restoreVaultSwitcher = value;
-					await this.plugin.saveSettings();
-					this.plugin.updateRibbonButtons();
-				}));
-
-		new Setting(containerEl)
-			.setName('Show help button')
-			.setDesc('Toggle the built-in help button in the ribbon.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.restoreVaultActionsHelp)
-				.onChange(async (value) => {
-					this.plugin.settings.restoreVaultActionsHelp = value;
-					await this.plugin.saveSettings();
-					this.plugin.updateRibbonButtons();
-				}));
-
-		new Setting(containerEl)
-			.setName('Show settings button')
-			.setDesc('Toggle the built-in settings button in the ribbon.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.restoreVaultActionsSettings)
-				.onChange(async (value) => {
-					this.plugin.settings.restoreVaultActionsSettings = value;
-					await this.plugin.saveSettings();
-					this.plugin.updateRibbonButtons();
-				}));
-
-		new Setting(containerEl)
-			.setName('Expand the sidebar with a ribbon')
-			.setDesc('Click on the blank area of ribbon to expand the sidebar.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.expandSidebar_onClickRibbon)
-				.onChange(async (value) => {
-					this.plugin.settings.expandSidebar_onClickRibbon = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Expand the sidebar with a note title')
-			.setDesc('Click on the note title to expand the left sidebar.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.expandSidebar_onClickNoteTitle)
-				.onChange(async (value) => {
-					this.plugin.settings.expandSidebar_onClickNoteTitle = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Lock sidebar collapse')
-			.setDesc('Add a pin that can temporarily lock the sidebar collapse.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.lockSidebar)
-				.onChange(async (value) => {
-					this.plugin.settings.lockSidebar = value;
-					await this.plugin.saveSettings();
-					this.plugin.togglePins();
-				}));
-
-		new Setting(containerEl).setName('Advanced').setHeading();
-
-		new Setting(containerEl)
-			.setName('HomePage Path')
-			.setDesc('Set the path of the HomePage file.')
-			.addText(text => text
-				.setPlaceholder('Enter the path of the homepage file')
-				.setValue(this.plugin.settings.homepagePath)
-				.onChange(async (value) => {
-					this.plugin.settings.homepagePath = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('HomePage Link')
-			.setDesc('Set the link of the web homepage.')
-			.addText(text => text
-				.setPlaceholder('Enter the path of the web homepage')
-				.setValue(this.plugin.settings.homepageLink)
-				.onChange(async (value) => {
-					this.plugin.settings.homepageLink = value;
-					await this.plugin.saveSettings();
-				}));
-
-		new Setting(containerEl)
-			.setName('Collapse sidebar on data type click')
-			.setDesc('Fold the sidebar when clicking on External links, MarkMind, Components, etc.')
-			.addToggle(toggle => toggle
-				.setValue(this.plugin.settings.collapseSidebar_onClickDataType)
-				.onChange(async (value) => {
-					this.plugin.settings.collapseSidebar_onClickDataType = value;
-					await this.plugin.saveSettings();
-					this.display(); // 重新渲染设置页面
-				}));
-
-		if (this.plugin.settings.collapseSidebar_onClickDataType) {
-			new Setting(containerEl)
-				.setName('Custom data types')
-				.setDesc('Add custom foldable view types, one per line. When monitoring, hide all sidebars.')
-				.addTextArea(text => text
-					.setPlaceholder('Enter custom type')
-					.setValue(this.plugin.settings.customDataTypes.join('\n'))
-					.onChange(async (value) => {
-						this.plugin.settings.customDataTypes = value.split('\n').filter(t => t.trim() !== '');
-						await this.plugin.saveSettings();
-					}));
+	
+	private updatePinButtonIcon() {
+		if (this.leftPinButton) {
+			this.leftPinButton.setIcon(this.settings.leftPinActive ? "oah-pin-off" : "oah-pin");
 		}
 	}
 }
