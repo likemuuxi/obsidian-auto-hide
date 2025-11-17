@@ -686,7 +686,7 @@ export default class AutoHidePlugin extends Plugin {
 
 			// 对文件进行升序排序，排除与目标文件夹和当前文件同名的文件
 			const sortedFiles = targetFolderFiles.children
-				.filter(file => file instanceof TFile)
+				.filter((file): file is TFile => file instanceof TFile)
 				.filter(file => {
 					const fileNameWithoutExt = file.name.replace(/\.[^/.]+$/, ""); // 移除文件扩展名
 					const activateFileNameWithoutExt = activateFileName.replace(/\.[^/.]+$/, ""); // 当前文件名（去除扩展名）
