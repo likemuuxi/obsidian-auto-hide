@@ -1,8 +1,9 @@
-import { Plugin, WorkspaceSidedock, WorkspaceLeaf, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView, Editor } from 'obsidian';
+import { Plugin, WorkspaceSidedock, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView, Editor, App } from 'obsidian';
 import AutoHideSettingTab from './setting-tab';
-import { AutoHideSettings, DEFAULT_SETTINGS } from './settings';
+import { AutoHideSettings, DEFAULT_SETTINGS, DEFAULT_FORCE_VIEW_MODE_SETTINGS } from './settings';
 import { cleanMarkdownFormatting } from './markdown-utils';
 import RibbonManager from './ribbon-manager';
+import ForceViewModeController from './force-view-mode';
 
 declare module 'obsidian' {
 	interface WorkspaceRibbon {
@@ -37,6 +38,7 @@ export default class AutoHidePlugin extends Plugin {
     private isMouseOverMenu = false;
     private layoutChangeHandler: (() => void) | null = null;
 	private ribbonManager: RibbonManager | null = null;
+	private forceViewModeController: ForceViewModeController | null = null;
 
 	// ===== Lifecycle & Settings =====
 	async onload() {
@@ -55,6 +57,8 @@ export default class AutoHidePlugin extends Plugin {
 		addIcon("oah-pin-off", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin-off"><line x1="2" y1="2" x2="22" y2="22"/><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 9v1.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17h14"/><path d="M15 9.34V6h1a2 2 0 0 0 0-4H7.89"/></svg>`);
 
 		this.setupTabClickListener();
+		this.forceViewModeController = new ForceViewModeController(this, () => this.settings.forceViewMode);
+		this.forceViewModeController.registerHandlers();
 
 		this.app.workspace.onLayoutReady(() => {
 			this.init();
@@ -103,10 +107,16 @@ export default class AutoHidePlugin extends Plugin {
 		}
 	
 		this.isMouseOverMenu = false;
+		this.forceViewModeController = null;
 	}
 
 	async loadSettings() {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+		this.settings.forceViewMode = Object.assign(
+			{},
+			DEFAULT_FORCE_VIEW_MODE_SETTINGS,
+			this.settings.forceViewMode ?? {}
+		);
 	}
 
 	async saveSettings() {

@@ -1,10 +1,10 @@
 {
-	"id": "obsidian-auto-hide",
-	"name": "Auto Hide",
-	"version": "0.6.0",
+	"id": "obsidian-automation",
+	"name": "Automation",
+	"version": "0.6.1",
 	"minAppVersion": "0.15.0",
-	"description": "Collapse sidebars when clicking on the editor/viewer panel",
-	"author": "skelato1, Muuxi",
+	"description": "some useful automation features",
+	"author": "Muuxi",
 	"authorUrl": "https://github.com/likemuuxi",
 	"isDesktopOnly": false
 }
