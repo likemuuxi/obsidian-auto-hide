@@ -63,6 +63,22 @@ export default class ForceViewModeController {
 			return;
 		}
 
+		let cachedTextContent: string | null = null;
+		let cachedLowerTextContent: string | null = null;
+
+		const getLowerTextContent = async () => {
+			if (cachedLowerTextContent !== null) {
+				return cachedLowerTextContent;
+			}
+
+			if (cachedTextContent === null) {
+				cachedTextContent = await this.app.vault.cachedRead(view.file);
+			}
+
+			cachedLowerTextContent = cachedTextContent.toLowerCase();
+			return cachedLowerTextContent;
+		};
+
 		let state = leaf.getViewState() as any;
 
 		const getStateData = (targetState: any): ViewModeState => {
@@ -157,6 +173,22 @@ export default class ForceViewModeController {
 				}
 
 				setFolderOrFileModeState(propertyRule.viewMode);
+			}
+		}
+
+		if (viewModeSettings.textContents?.length) {
+			for (const textRule of viewModeSettings.textContents) {
+				const needle = textRule.contains?.trim();
+
+				if (!needle || !textRule.viewMode) {
+					continue;
+				}
+
+				const content = await getLowerTextContent();
+
+				if (content.includes(needle.toLowerCase())) {
+					setFolderOrFileModeState(textRule.viewMode);
+				}
 			}
 		}
 

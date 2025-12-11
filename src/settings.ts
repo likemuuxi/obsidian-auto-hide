@@ -19,6 +19,11 @@ export interface ForceViewModeLinkSuffixSetting {
 	viewMode: string;
 }
 
+export interface ForceViewModeTextSetting {
+	contains: string;
+	viewMode: string;
+}
+
 export interface ForceViewModeSettings {
 	enabled: boolean;
 	debounceTimeout: number;
@@ -28,6 +33,7 @@ export interface ForceViewModeSettings {
 	files: ForceViewModeFileSetting[];
 	frontmatterProperties: ForceViewModeFrontmatterSetting[];
 	linkSuffixes: ForceViewModeLinkSuffixSetting[];
+	textContents: ForceViewModeTextSetting[];
 }
 
 export interface AutoHideSettings {
@@ -54,7 +60,8 @@ export const DEFAULT_FORCE_VIEW_MODE_SETTINGS: ForceViewModeSettings = {
 	folders: [{ folder: "", viewMode: "" }],
 	files: [{ filePattern: "", viewMode: "" }],
 	frontmatterProperties: [{ property: "", value: "", viewMode: "" }],
-	linkSuffixes: [{ suffix: "", viewMode: "" }]
+	linkSuffixes: [{ suffix: "", viewMode: "" }],
+	textContents: [{ contains: "", viewMode: "" }]
 };
 
 export const DEFAULT_SETTINGS: AutoHideSettings = {

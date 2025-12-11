@@ -433,6 +433,76 @@ export default class AutoHideSettingTab extends PluginSettingTab {
 			div.appendChild(containerEl.lastChild as Node);
 		});
 
+		createHeader('Text content');
+
+		const textContentDesc = document.createDocumentFragment();
+		textContentDesc.append(
+			'Force a mode when the note body contains the given text (case-insensitive). Useful for code fences such as ',
+			textContentDesc.createEl('code', { text: '```folder-overview' }),
+			'.'
+		);
+
+		new Setting(containerEl).setDesc(textContentDesc);
+
+		new Setting(containerEl)
+			.setDesc('Add text rule')
+			.addButton((button) => {
+				button
+					.setTooltip('Add another text rule')
+					.setButtonText('+')
+					.setCta()
+					.onClick(async () => {
+						this.plugin.settings.forceViewMode.textContents.push({
+							contains: '',
+							viewMode: ''
+						});
+						await this.plugin.saveSettings();
+						this.display();
+					});
+			});
+
+		this.plugin.settings.forceViewMode.textContents.forEach((rule, index) => {
+			const div = containerEl.createEl('div');
+			div.addClass('force-view-mode-div');
+			div.addClass('force-view-mode-folder');
+
+			const s = new Setting(containerEl)
+				.addText((text) => {
+					text.setPlaceholder('Text to match (e.g. ```folder-overview)')
+						.setValue(rule.contains)
+						.onChange(async (value) => {
+							this.plugin.settings.forceViewMode.textContents[index].contains = value;
+							await this.plugin.saveSettings();
+						});
+				})
+				.addDropdown((cb) => {
+					modes.forEach((mode) => {
+						cb.addOption(mode, mode);
+					});
+
+					cb.setValue(rule.viewMode || 'default').onChange(async (value) => {
+						this.plugin.settings.forceViewMode.textContents[index].viewMode = value;
+
+						await this.plugin.saveSettings();
+					});
+				})
+				.addExtraButton((cb) => {
+					cb.setIcon('cross')
+						.setTooltip('Delete')
+						.onClick(async () => {
+							this.plugin.settings.forceViewMode.textContents.splice(index, 1);
+
+							await this.plugin.saveSettings();
+
+							this.display();
+						});
+				});
+
+			s.infoEl.remove();
+
+			div.appendChild(containerEl.lastChild as Node);
+		});
+
 		createHeader('Link suffix rules');
 
 		const suffixDesc = document.createDocumentFragment();

@@ -1,7 +1,7 @@
 {
 	"id": "obsidian-automation",
 	"name": "Automation",
-	"version": "0.6.1",
+	"version": "0.6.2",
 	"minAppVersion": "0.15.0",
 	"description": "some useful automation features",
 	"author": "Muuxi",
