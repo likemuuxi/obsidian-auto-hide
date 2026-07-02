@@ -6,7 +6,7 @@ on:
       - "*"
 
 env:
-  PLUGIN_NAME: obsidian-auto-hide # Change this to match the id of your plugin.
+  PLUGIN_NAME: obsidian-messy-functions # Change this to match the id of your plugin.
 
 jobs:
   build:

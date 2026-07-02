@@ -1,7 +1,7 @@
 import { Plugin, WorkspaceSidedock, ButtonComponent, addIcon, TFile, Menu, TFolder, Platform, MarkdownView, Editor, App } from 'obsidian';
 import AutoHideSettingTab from './setting-tab';
 import { AutoHideSettings, DEFAULT_SETTINGS, DEFAULT_FORCE_VIEW_MODE_SETTINGS } from './settings';
-import { cleanMarkdownFormatting } from './markdown-utils';
+import { cleanMarkdownFormatting, demoteHeadings, promoteHeadings } from './markdown-utils';
 import RibbonManager from './ribbon-manager';
 import ForceViewModeController from './force-view-mode';
 
@@ -51,6 +51,18 @@ export default class AutoHidePlugin extends Plugin {
 			id: 'clean-markdown-formatting',
 			name: 'Clean up Markdown grammar',
 			editorCallback: (editor: Editor) => cleanMarkdownFormatting(editor)
+		});
+
+		this.addCommand({
+			id: 'demote-headings',
+			name: 'Demote headings in selection',
+			editorCallback: (editor: Editor) => demoteHeadings(editor)
+		});
+
+		this.addCommand({
+			id: 'promote-headings',
+			name: 'Promote headings in selection',
+			editorCallback: (editor: Editor) => promoteHeadings(editor)
 		});
 
 		addIcon("oah-pin", `<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-pin"><line x1="12" x2="12" y1="17" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z"/></svg>`);

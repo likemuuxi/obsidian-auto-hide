@@ -1,9 +1,9 @@
 {
-	"id": "obsidian-automation",
-	"name": "Automation",
+	"id": "obsidian-messy-functions",
+	"name": "Messy Functions",
 	"version": "0.6.2",
 	"minAppVersion": "0.15.0",
-	"description": "some useful automation features",
+	"description": "Some messy functions",
 	"author": "Muuxi",
 	"authorUrl": "https://github.com/likemuuxi",
 	"isDesktopOnly": false
